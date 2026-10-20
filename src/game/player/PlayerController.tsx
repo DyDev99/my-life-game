@@ -19,7 +19,13 @@ function isNearSportsBall() {
   return Math.hypot(x - -26, z - 95) < 3.0 || Math.hypot(x - 26, z - 92) < 3.0;
 }
 import { audio } from "@/game/audio/audioManager";
-import { collisionWorld } from "@/game/physics/collisionSystem";
+import { collisionWorld, getSurfaceElevation, findNearestRoadPoint } from "@/game/physics/collisionSystem";
+import { calculateVehicleImpactDamage, BUILDING_REGISTRY } from "@/game/physics/buildingDestruction";
+import { mobileInput } from "@/game/player/mobileInput";
+import { WORLD_BOUNDS } from "@/data/cityLayout";
+
+// Keep ground movement this far inside the world edge
+const WORLD_EDGE_MARGIN = 4;
 
 // Static spawn coordinates of motorcycles & bicycles in Kampong Cham
 const MOTORBIKE_SPAWN: [number, number, number] = [8, 0, -14.2];
@@ -57,6 +63,8 @@ export function PlayerController() {
       ) {
         return;
       }
+      // Pause / map screens own the keyboard (see ui/screens/PauseMenu)
+      if (useGameStore.getState().pauseScreen) return;
 
       keys.current[e.key.toLowerCase()] = true;
       keys.current[e.code] = true;
@@ -82,7 +90,10 @@ export function PlayerController() {
 
       // Handle hotkeys
       if (e.key === "Escape") {
-        closeModal();
+        if (activeModal) {
+          e.preventDefault(); // handled: don't also open the pause menu
+          closeModal();
+        }
       } else if (e.key === "c" || e.key === "C") {
         // Toggle Character Switcher Modal
         if (activeModal === "character_select") {
@@ -94,17 +105,38 @@ export function PlayerController() {
         // Toggle Mount / Dismount Vehicle
         const state = useGameStore.getState();
         if (state.ridingVehicle) {
+          if (state.ridingVehicle === "plane" && (state.planeAltitude > 2.0 || Math.abs(currentSpeed.current) > 50)) {
+            state.addStatPop(
+              state.language === "km" ? "ត្រូវចុះចតលើដីសិន មុនពេលចុះ ⚠️" : "Land aircraft on ground before exiting ⚠️",
+              "stress"
+            );
+            return;
+          }
           currentHeading.current = vehicleAngle.current;
-          // Step player out to the driver's side of the vehicle
-          if (state.ridingVehicle === "supercar") {
-            const exitX = state.targetPos[0] - Math.cos(vehicleAngle.current) * 1.6;
-            const exitZ = state.targetPos[2] + Math.sin(vehicleAngle.current) * 1.6;
-            useGameStore.setState({ targetPos: [exitX, 0, exitZ], cameraFocus: [exitX, 0, exitZ] });
+          // Step player out to the side of the vehicle with collision safety check
+          if (state.ridingVehicle === "supercar" || state.ridingVehicle === "plane") {
+            const rawExitX = state.targetPos[0] - Math.cos(vehicleAngle.current) * 2.2;
+            const rawExitZ = state.targetPos[2] + Math.sin(vehicleAngle.current) * 2.2;
+            const safeExit = collisionWorld.resolvePlayer(state.targetPos[0], state.targetPos[2], rawExitX, rawExitZ, 0.45);
+            const exitY = getSurfaceElevation(safeExit.x, safeExit.z);
+            useGameStore.setState({ targetPos: [safeExit.x, exitY, safeExit.z], cameraFocus: [safeExit.x, exitY, safeExit.z] });
           }
           dismountVehicle();
         } else if (state.nearVehicle) {
           vehicleAngle.current = currentHeading.current;
           mountVehicle(state.nearVehicle);
+        }
+      } else if (e.key === "u" || e.key === "U") {
+        // Vehicle Unstuck & Safe Recovery to Nearest Road
+        if (useGameStore.getState().ridingVehicle) {
+          useGameStore.getState().recoverVehicle();
+          vehicleAngle.current = useGameStore.getState().playerHeading;
+          currentSpeed.current = 0;
+        }
+      } else if (e.key === "k" || e.key === "K") {
+        // City Reconstruction / Emergency Repair Hotkey
+        if (Object.keys(useGameStore.getState().damagedBuildings).length > 0) {
+          useGameStore.getState().repairAllBuildings();
         }
       } else if (e.key === "h" || e.key === "H") {
         // Honk vehicle horn
@@ -131,10 +163,17 @@ export function PlayerController() {
         const distToVolleyball = Math.hypot(currX - 26, currZ - 92);
 
         if (state.ridingVehicle) {
+          if (state.ridingVehicle === "plane" && (state.planeAltitude > 2.0 || Math.abs(currentSpeed.current) > 50)) {
+            state.addStatPop(
+              state.language === "km" ? "ត្រូវចុះចតលើដីសិន មុនពេលចុះ ⚠️" : "Land aircraft on ground before exiting ⚠️",
+              "stress"
+            );
+            return;
+          }
           currentHeading.current = vehicleAngle.current;
-          if (state.ridingVehicle === "supercar") {
-            const exitX = state.targetPos[0] - Math.cos(vehicleAngle.current) * 1.6;
-            const exitZ = state.targetPos[2] + Math.sin(vehicleAngle.current) * 1.6;
+          if (state.ridingVehicle === "supercar" || state.ridingVehicle === "plane") {
+            const exitX = state.targetPos[0] - Math.cos(vehicleAngle.current) * 2.2;
+            const exitZ = state.targetPos[2] + Math.sin(vehicleAngle.current) * 2.2;
             useGameStore.setState({ targetPos: [exitX, 0, exitZ], cameraFocus: [exitX, 0, exitZ] });
           }
           dismountVehicle();
@@ -178,7 +217,7 @@ export function PlayerController() {
         if (distToFootball >= 3.0 && distToVolleyball >= 3.0 && !activeModal) {
           openModal("decision");
         }
-      } else if (e.key === "p" || e.key === "P" || e.key === "m" || e.key === "M") {
+      } else if (e.key === "p" || e.key === "P") {
         if (activeModal === "phone") {
           closeModal();
         } else {
@@ -239,6 +278,10 @@ export function PlayerController() {
   function checkProximity(pos: [number, number, number]) {
     const state = useGameStore.getState();
 
+    // 0. Fighter Jet Proximity
+    const planePos = state.planePos;
+    const distPlane = Math.hypot(pos[0] - planePos[0], pos[2] - planePos[2]);
+
     // 1. Supercar Proximity (Check proximity to driver's side door at supercarPos)
     const supercarPos = state.supercarPos;
     const distSupercar = Math.hypot(pos[0] - supercarPos[0], pos[2] - supercarPos[2]);
@@ -247,7 +290,9 @@ export function PlayerController() {
     const distMoto = Math.hypot(pos[0] - MOTORBIKE_SPAWN[0], pos[2] - MOTORBIKE_SPAWN[2]);
     const distBike = Math.hypot(pos[0] - BICYCLE_SPAWN[0], pos[2] - BICYCLE_SPAWN[2]);
 
-    if (distSupercar < 4.2) {
+    if (distPlane < 6.5) {
+      setNearVehicle("plane");
+    } else if (distSupercar < 4.2) {
       setNearVehicle("supercar");
     } else if (distMoto < 4.5) {
       setNearVehicle("motorbike");
@@ -279,33 +324,39 @@ export function PlayerController() {
     const playerTarget = useGameStore.getState().targetPos;
 
     // =========================================================================
-    // 1. VEHICLE DRIVING MODE (SUPERCAR, MOTORBIKE, BICYCLE)
+    // 1. VEHICLE DRIVING & FLIGHT MODE (FIGHTER JET, SUPERCAR, MOTORBIKE, BICYCLE)
     // =========================================================================
     if (ridingVehicle) {
+      const isPlane = ridingVehicle === "plane";
       const isCar = ridingVehicle === "supercar";
       const isMoto = ridingVehicle === "motorbike";
 
-      // Authentic physics tuning
-      const maxForward = isCar ? 135 : isMoto ? 52 : 22; // km/h
-      const maxReverse = isCar ? -24 : isMoto ? -14 : -7;
-      const accelRate = isCar ? 46 : isMoto ? 32 : 16;
-      const brakeRate = isCar ? 62 : isMoto ? 42 : 28;
-      const turnRate = isCar ? 2.3 : isMoto ? 2.5 : 2.9;
+      const isBoost = isPlane && Boolean(k["shift"]);
 
-      const throttle = k["w"] || k["arrowup"];
-      const reverse = k["s"] || k["arrowdown"];
+      // Authentic physics & flight tuning
+      const maxForward = isPlane ? (isBoost ? 460 : 250) : isCar ? 135 : isMoto ? 52 : 22; // km/h
+      const maxReverse = isPlane ? -10 : isCar ? -24 : isMoto ? -14 : -7;
+      const accelRate = isPlane ? (isBoost ? 110 : 65) : isCar ? 46 : isMoto ? 32 : 16;
+      const brakeRate = isPlane ? 45 : isCar ? 62 : isMoto ? 42 : 28;
+      const turnRate = isPlane ? 1.85 : isCar ? 2.3 : isMoto ? 2.5 : 2.9;
+
+      const joy = mobileInput.getJoystick();
+      const throttle = k["w"] || k["arrowup"] || joy.y > 0.25;
+      const reverse = k["s"] || k["arrowdown"] || joy.y < -0.25;
       const handbrake = k[" "];
-      const steerLeft = k["a"] || k["arrowleft"];
-      const steerRight = k["d"] || k["arrowright"];
+      const steerLeft = k["a"] || k["arrowleft"] || joy.x < -0.25;
+      const steerRight = k["d"] || k["arrowright"] || joy.x > 0.25;
 
-      // Speed-dependent turning sensitivity (GTA V handling feel)
+
+      // Speed-dependent turning sensitivity
       const absSpeed = Math.abs(currentSpeed.current);
-      const speedSteerFactor =
-        absSpeed < 0.2
-          ? throttle || reverse
-            ? 0.75
-            : 0.35
-          : Math.min(1.2, 0.45 + absSpeed / (isCar ? 24.0 : 12.0));
+      const speedSteerFactor = isPlane
+        ? Math.min(1.3, 0.45 + absSpeed / 50.0)
+        : absSpeed < 0.2
+        ? throttle || reverse
+          ? 0.75
+          : 0.35
+        : Math.min(1.2, 0.45 + absSpeed / (isCar ? 24.0 : 12.0));
       const turnDir = currentSpeed.current < -0.2 ? -1 : 1;
       const effectiveTurn = turnRate * speedSteerFactor * turnDir;
 
@@ -317,7 +368,7 @@ export function PlayerController() {
       }
 
       // Acceleration / Braking
-      if (handbrake) {
+      if (handbrake && !isPlane) {
         currentSpeed.current = THREE.MathUtils.lerp(currentSpeed.current, 0, delta * (isCar ? 14 : 12));
         if (isCar && absSpeed > 18 && performance.now() - tireScreechCooldown.current > 420) {
           audio.playTireScreech();
@@ -335,50 +386,123 @@ export function PlayerController() {
         );
       } else {
         // Natural coasting deceleration
-        currentSpeed.current = THREE.MathUtils.lerp(currentSpeed.current, 0, delta * (isCar ? 1.8 : 2.8));
+        currentSpeed.current = THREE.MathUtils.lerp(
+          currentSpeed.current,
+          0,
+          delta * (isPlane ? 0.8 : isCar ? 1.8 : 2.8)
+        );
+      }
+
+      // 3D Altitude & Surface Elevation Physics
+      let nextY = playerTarget[1];
+      if (isPlane) {
+        const climbRate = isBoost ? 22.0 : 14.0;
+        const diveRate = 12.0;
+
+        // Space or W pitches nose up and climbs
+        if (k[" "] || (throttle && nextY > 0.8)) {
+          nextY = Math.min(65.0, nextY + climbRate * delta);
+        } else if (k["q"] || k["c"] || (reverse && nextY > 0.2)) {
+          nextY = Math.max(0.0, nextY - diveRate * delta);
+        } else if (absSpeed < 35 && nextY > 0.1) {
+          // Slow speed / stall safeguard: glide gently downward
+          nextY = Math.max(0.0, nextY - 4.5 * delta);
+        }
       }
 
       // Convert speed (km/h) to world displacement (meters/sec)
-      const worldSpeed = (currentSpeed.current / 3.6) * delta * (isCar ? 1.6 : 1.5);
+      const worldSpeed = (currentSpeed.current / 3.6) * delta * (isPlane ? 1.8 : isCar ? 1.55 : isMoto ? 1.45 : 1.35);
       const forwardX = Math.sin(vehicleAngle.current) * worldSpeed;
       const forwardZ = Math.cos(vehicleAngle.current) * worldSpeed;
 
-      // Expanded open world bounds (including Sports City: X [-75, 75], Z [-58, 125])
-      const rawNextX = Math.max(-75, Math.min(75, playerTarget[0] + forwardX));
-      const rawNextZ = Math.max(-58, Math.min(125, playerTarget[2] + forwardZ));
+      // Open world bounds from data/cityLayout (the jet may fly a little past the edge)
+      const margin = isPlane ? -60 : WORLD_EDGE_MARGIN;
+      const rawNextX = Math.max(WORLD_BOUNDS.minX + margin, Math.min(WORLD_BOUNDS.maxX - margin, playerTarget[0] + forwardX));
+      const rawNextZ = Math.max(WORLD_BOUNDS.minZ + margin, Math.min(WORLD_BOUNDS.maxZ - margin, playerTarget[2] + forwardZ));
 
-      // Resolve solid collision against world buildings & obstacles
-      const resolved = collisionWorld.resolveVehicle(
-        playerTarget[0],
-        playerTarget[2],
-        rawNextX,
-        rawNextZ,
-        isCar ? 1.4 : 0.85
-      );
+      let nextX = rawNextX;
+      let nextZ = rawNextZ;
 
-      const nextX = resolved.x;
-      const nextZ = resolved.z;
-      if (resolved.collided) {
-        currentSpeed.current *= 0.55; // absorb impact energy
+      // Continuous Collision Detection (CCD) Physics Solver
+      // Guarantees vehicles CANNOT tunnel through buildings or houses at any speed
+      if (!isPlane || nextY <= 2.5) {
+        const vehicleRadius = isPlane ? 2.2 : isCar ? 1.35 : isMoto ? 0.65 : 0.45;
+        const sweep = collisionWorld.resolveVehicle(
+          playerTarget[0],
+          playerTarget[2],
+          rawNextX,
+          rawNextZ,
+          vehicleRadius
+        );
+        nextX = sweep.x;
+        nextZ = sweep.z;
+
+        if (sweep.collided) {
+          const impactSpeed = absSpeed * Math.max(0.25, sweep.impactSpeedFraction);
+
+          // 1. Transmit physical collision damage to hit building / structure
+          if (sweep.hitObstacleId && impactSpeed > 18) {
+            const bConfig = BUILDING_REGISTRY[sweep.hitObstacleId];
+            const category = bConfig?.category || "concrete";
+            const dmg = calculateVehicleImpactDamage(ridingVehicle, impactSpeed, category);
+            if (dmg > 0) {
+              useGameStore.getState().damageBuildingWithAmount(
+                sweep.hitObstacleId,
+                dmg,
+                [nextX, nextY, nextZ],
+                sweep.hitObstacleName,
+                "vehicle"
+              );
+            }
+          }
+
+          // 2. Believable collision response audio and camera shockwave
+          if (impactSpeed > 18) {
+            if (isCar) audio.playCarCrash(Math.min(1.0, impactSpeed / 70));
+            else if (isMoto) audio.playCarCrash(Math.min(0.6, impactSpeed / 55));
+            else audio.playBicycleCrash();
+
+            useGameStore.getState().triggerCameraShake(Math.min(0.85, 0.2 + impactSpeed / 85));
+          }
+
+          // 3. Momentum rebound & reflection (prevents vehicle from becoming stuck inside walls)
+          if (sweep.impactSpeedFraction > 0.45) {
+            // Direct head-on collision: rebound backwards slightly
+            currentSpeed.current = -currentSpeed.current * (isCar ? 0.22 : 0.12);
+          } else {
+            // Glancing impact: slide along tangent wall and lose fraction of momentum
+            currentSpeed.current *= Math.max(0.2, 1.0 - sweep.impactSpeedFraction * 0.75);
+          }
+        }
       }
 
-      useGameStore.setState({
-        targetPos: [nextX, playerTarget[1], nextZ],
-        cameraFocus: [nextX, playerTarget[1], nextZ],
+      // Smooth Surface Elevation Tracking across roads, approach ramps, and elevated bridge deck
+      if (!isPlane) {
+        const targetSurfaceY = getSurfaceElevation(nextX, nextZ);
+        nextY = THREE.MathUtils.damp(playerTarget[1], targetSurfaceY, 18.0, delta);
+      }
+
+      useGameStore.setState((s) => ({
+        targetPos: [nextX, nextY, nextZ],
+        cameraFocus: [nextX, nextY, nextZ],
         playerHeading: vehicleAngle.current,
         vehicleSpeed: Math.round(Math.abs(currentSpeed.current)),
-      });
+        planeAltitude: isPlane ? nextY : 0,
+        planePos: isPlane ? [nextX, nextY, nextZ] : s.planePos,
+        planeHeading: isPlane ? vehicleAngle.current : s.planeHeading,
+        isAfterburnerActive: isBoost && absSpeed > 30,
+      }));
 
       // Update parked supercar location while driving
       if (isCar) {
         useGameStore.setState({
-          supercarPos: [nextX, playerTarget[1], nextZ],
+          supercarPos: [nextX, nextY, nextZ],
           supercarHeading: vehicleAngle.current,
         });
       }
 
       useGameStore.getState().setMovementState("riding", Math.abs(currentSpeed.current));
-      checkProximity([nextX, 0, nextZ]);
+      checkProximity([nextX, nextY, nextZ]);
       return;
     }
 
@@ -411,21 +535,65 @@ export function PlayerController() {
     if (right) inputRight += 1;
     if (left) inputRight -= 1;
 
-    const hasInput = inputForward !== 0 || inputRight !== 0;
+    // Mobile touch joystick
+    const joy = mobileInput.getJoystick();
+    if (Math.abs(joy.y) > 0.05) inputForward += joy.y;
+    if (Math.abs(joy.x) > 0.05) inputRight += joy.x;
+
+    // Gamepad Left Stick Locomotion (Computer controller)
+    if (typeof navigator !== "undefined" && navigator.getGamepads) {
+      const gp = navigator.getGamepads()[0] || navigator.getGamepads()[1];
+      if (gp) {
+        const deadzone = 0.18;
+        const lx = Math.abs(gp.axes[0]) > deadzone ? gp.axes[0] : 0;
+        const ly = Math.abs(gp.axes[1]) > deadzone ? -gp.axes[1] : 0;
+        if (lx !== 0 || ly !== 0) {
+          inputForward += ly;
+          inputRight += lx;
+        }
+      }
+    }
+
+    const hasInput = Math.hypot(inputForward, inputRight) > 0.05;
 
     const moveDir = new THREE.Vector3();
     if (hasInput) {
       moveDir.addScaledVector(camDir, inputForward);
       moveDir.addScaledVector(camRight, inputRight);
       moveDir.normalize();
+    }
 
-      // Smoothly rotate character toward movement direction (shortest arc)
+    const isArmed = Boolean(useGameStore.getState().currentWeaponId);
+    const isAiming = useGameStore.getState().isAiming;
+
+    // Facing direction: when weapon is equipped or aiming, character faces crosshair aim vector (strafing)
+    if (isArmed) {
+      const camAngle = Math.atan2(camDir.x, camDir.z);
+      let angleDiff = camAngle - currentHeading.current;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      currentHeading.current += angleDiff * Math.min(1, delta * (isAiming ? 24.0 : 16.0));
+    } else if (hasInput) {
+      // Normal movement: face movement direction
       const targetAngle = Math.atan2(moveDir.x, moveDir.z);
       let angleDiff = targetAngle - currentHeading.current;
       while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
       while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
       currentHeading.current += angleDiff * Math.min(1, delta * 15.0);
+    } else {
+      // If idle, face towards designated attack target if one is locked
+      const target = useGameStore.getState().lockedTarget;
+      if (target) {
+        const dx = target.position[0] - playerTarget[0];
+        const dz = target.position[2] - playerTarget[2];
+        const targetAngle = Math.atan2(dx, dz);
+        let angleDiff = targetAngle - currentHeading.current;
+        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+        currentHeading.current += angleDiff * Math.min(1, delta * 8.0);
+      }
     }
+
 
     // Target locomotion speed (0 for idle, 5.2 m/s for walk/jog, 11.5 m/s for sprint)
     const combat = useGameStore.getState().combat;
@@ -440,9 +608,9 @@ export function PlayerController() {
       const moveX = Math.sin(currentHeading.current) * step;
       const moveZ = Math.cos(currentHeading.current) * step;
 
-      // Expanded world boundary limits (including Sports City: X [-75, 75], Z [-58, 125])
-      const rawNextX = Math.max(-75, Math.min(75, playerTarget[0] + moveX));
-      const rawNextZ = Math.max(-58, Math.min(125, playerTarget[2] + moveZ));
+      // World boundary limits (data/cityLayout)
+      const rawNextX = Math.max(WORLD_BOUNDS.minX + WORLD_EDGE_MARGIN, Math.min(WORLD_BOUNDS.maxX - WORLD_EDGE_MARGIN, playerTarget[0] + moveX));
+      const rawNextZ = Math.max(WORLD_BOUNDS.minZ + WORLD_EDGE_MARGIN, Math.min(WORLD_BOUNDS.maxZ - WORLD_EDGE_MARGIN, playerTarget[2] + moveZ));
 
       // Resolve solid world collision & wall sliding!
       const resolved = collisionWorld.resolvePlayer(
@@ -456,13 +624,17 @@ export function PlayerController() {
       const nextX = resolved.x;
       const nextZ = resolved.z;
 
+      // Surface elevation on ramps and bridges
+      const targetSurfaceY = getSurfaceElevation(nextX, nextZ);
+      const nextY = THREE.MathUtils.damp(playerTarget[1], targetSurfaceY, 18.0, delta);
+
       useGameStore.setState({
-        targetPos: [nextX, playerTarget[1], nextZ],
-        cameraFocus: [nextX, playerTarget[1], nextZ],
+        targetPos: [nextX, nextY, nextZ],
+        cameraFocus: [nextX, nextY, nextZ],
         playerHeading: currentHeading.current,
       });
 
-      checkProximity([nextX, 0, nextZ]);
+      checkProximity([nextX, nextY, nextZ]);
     } else {
       checkProximity(playerTarget);
     }

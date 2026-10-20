@@ -5,6 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useGameStore } from "@/state/gameStore";
 import { Supercar, Motorbike, RemorkTukTuk } from "@/game/vehicles/VehiclesAndCharacters";
+import { getSurfaceElevation } from "@/game/physics/collisionSystem";
 
 // =============================================================================
 // PROCEDURAL MODERN EXECUTIVE SEDAN & CITY CAR (ឡានទំនើបក្នុងក្រុង)
@@ -148,7 +149,7 @@ export function CitySedan({
 // =============================================================================
 // DYNAMIC MOVING TRAFFIC VEHICLE (ឡានបើកបរតាមផ្លូវ)
 // =============================================================================
-function MovingCar({
+export function MovingCar({
   type = "sedan",
   color = "#2563EB",
   waypoints,
@@ -188,6 +189,20 @@ function MovingCar({
       const moveStep = Math.min(dist, speed * delta);
       pos.x += Math.sin(angle) * moveStep;
       pos.z += Math.cos(angle) * moveStep;
+
+      // Realistic 3D bridge deck and ramp elevation tracking
+      const surfaceElev = getSurfaceElevation(pos.x, pos.z);
+      pos.y = THREE.MathUtils.damp(pos.y, surfaceElev, 14.0, delta);
+
+      // Pitch tilt when ascending/descending bridge ramps
+      const isAscendingNorthRamp = pos.z >= 18 && pos.z <= 26 && pos.x >= 21 && pos.x <= 29;
+      const isDescendingSouthRamp = pos.z >= 50 && pos.z <= 56 && pos.x >= 21 && pos.x <= 29;
+      const targetPitch = isAscendingNorthRamp
+        ? (angle > -Math.PI / 2 && angle < Math.PI / 2 ? 0.185 : -0.185)
+        : isDescendingSouthRamp
+        ? (angle > -Math.PI / 2 && angle < Math.PI / 2 ? -0.245 : 0.245)
+        : 0;
+      groupRef.current.rotation.x = THREE.MathUtils.lerp(groupRef.current.rotation.x, targetPitch, delta * 6.0);
 
       // Spin wheels
       wheelSpin.current += (moveStep / 0.34) * 1.5;
@@ -258,15 +273,15 @@ export function CityTrafficSystem() {
         color="#2563EB"
         speed={8.5} // ~30 km/h city speed
         waypoints={[
-          [18, 0, -22],   // Hotel plaza
-          [18, 0, -4],    // Shophouses
-          [18, 0, 8],     // South intersection
-          [-10, 0, 8],    // Pagoda south road
-          [-38, 0, 8],    // West intersection
-          [-38, 0, -14],  // Town Hall
-          [-22, 0, -14],  // West avenue
-          [0, 0, -14],    // School front road
-          [18, 0, -14],   // Market avenue
+          [22.5, 0, -18], // Hotel plaza driveway (unobstructed)
+          [22.5, 0, -4],  // Shophouses east lane
+          [22.5, 0, 8],   // South intersection
+          [-10, 0, 16],   // Temple Boulevard west lane
+          [-38, 0, 16],   // West intersection
+          [-38, 0, -15],  // Town Hall avenue
+          [-22, 0, -15],  // West avenue
+          [0, 0, -15],    // School front Heritage Laterite road
+          [22.5, 0, -15], // Market avenue
         ]}
       />
 
@@ -285,19 +300,19 @@ export function CityTrafficSystem() {
         ]}
       />
 
-      {/* Route 4: Riverside Avenue Passenger Remork Tuk-Tuk */}
+      {/* Route 4: Riverside Scenic Promenade Passenger Remork Tuk-Tuk */}
       <MovingCar
         type="remork"
         speed={6.0}
         waypoints={[
-          [18, 0, -26],   // Hotel riverside
-          [2, 0, -26],    // Central riverside
-          [-18, 0, -26],  // Village riverside
-          [-32, 0, -26],  // West riverbank
-          [-32, 0, -24],  // Turn
-          [-18, 0, -24],  // Return east
-          [2, 0, -24],
-          [18, 0, -24],
+          [18, 0, 24.0],  // Hotel riverside promenade
+          [2, 0, 24.0],   // Central riverside promenade
+          [-18, 0, 24.0], // West riverside promenade
+          [-32, 0, 24.0], // West riverbank turnaround
+          [-32, 0, 24.5],
+          [-18, 0, 24.5], // Return east along promenade
+          [2, 0, 24.5],
+          [18, 0, 24.5],
         ]}
       />
 
@@ -307,14 +322,14 @@ export function CityTrafficSystem() {
         color="#DC2626"
         speed={8.0}
         waypoints={[
-          [-40, 0, -4],
-          [-15, 0, -4],
-          [5, 0, -4],
-          [24, 0, -4],
-          [24, 0, -2],
-          [5, 0, -2],
-          [-15, 0, -2],
-          [-40, 0, -2],
+          [-40, 0, -15], // Heritage Laterite road in front of Town Hall
+          [-15, 0, -15], // Laterite road in front of village
+          [0, 0, -15],   // In front of School main gate
+          [18, 0, -15],  // In front of Market
+          [18, 0, -13.5],
+          [0, 0, -13.5], // Return west lane
+          [-15, 0, -13.5],
+          [-40, 0, -13.5],
         ]}
       />
 

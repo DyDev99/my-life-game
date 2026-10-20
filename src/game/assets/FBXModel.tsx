@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
-import { FBXLoader, SkeletonUtils } from "three-stdlib";
+import { FBXLoader, GLTFLoader, SkeletonUtils } from "three-stdlib";
 import * as THREE from "three";
 
 // Shared in-memory cache for parsed FBX models so each file is only fetched and parsed once
@@ -106,13 +106,55 @@ export function loadFBX(url: string): Promise<THREE.Group> {
     );
   });
 
-  loadingPromises.set(url, promise);
-  return promise;
-}
+    loadingPromises.set(url, promise);
+    return promise;
+  }
 
-/**
- * Reusable React component that renders a cached 3D FBX model with position, rotation, and scale.
- */
+  const gltfCache = new Map<string, THREE.Group>();
+  const gltfLoadingPromises = new Map<string, Promise<THREE.Group>>();
+
+  /**
+   * Loads and caches a GLTF/GLB model from a URL.
+   */
+  export function loadGLTF(url: string): Promise<THREE.Group> {
+    if (gltfCache.has(url)) {
+      return Promise.resolve(gltfCache.get(url)!);
+    }
+    if (gltfLoadingPromises.has(url)) {
+      return gltfLoadingPromises.get(url)!;
+    }
+
+    const promise = new Promise<THREE.Group>((resolve, reject) => {
+      const loader = new GLTFLoader();
+      loader.load(
+        url,
+        (gltf) => {
+          const scene = gltf.scene || gltf.scenes[0];
+          scene.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+              const mesh = child as THREE.Mesh;
+              mesh.castShadow = true;
+              mesh.receiveShadow = true;
+            }
+          });
+          gltfCache.set(url, scene);
+          resolve(scene);
+        },
+        undefined,
+        (err) => {
+          console.warn(`Failed to load GLTF model ${url}:`, err);
+          reject(err);
+        }
+      );
+    });
+
+    gltfLoadingPromises.set(url, promise);
+    return promise;
+  }
+
+  /**
+   * Reusable React component that renders a cached 3D FBX model with position, rotation, and scale.
+   */
 export function FBXModel({
   url,
   position = [0, 0, 0],

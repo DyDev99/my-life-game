@@ -9,6 +9,8 @@ import { useGameStore } from "@/state/gameStore";
 import { MODELS } from "@/game/assets/assetPaths";
 import { CHARACTERS, type CharacterId } from "@/data/characters";
 import { ClipCharacterAvatar } from "@/game/player/ClipCharacterAvatar";
+import { FighterJet } from "./FighterJet";
+export { FighterJet };
 
 // =============================================================================
 // 1. MOTORBIKE (ម៉ូតូ) — High-Detail 3D Motorcycle with Spinning Wheels & Chrome
@@ -876,6 +878,8 @@ export function PlayerCharacter() {
   const currentSpeed = useGameStore((state) => state.currentSpeed);
   const playerHeading = useGameStore((state) => state.playerHeading);
   const enterVehicleAnimation = useGameStore((state) => state.enterVehicleAnimation);
+  const planeAltitude = useGameStore((state) => state.planeAltitude);
+  const isAfterburnerActive = useGameStore((state) => state.isAfterburnerActive);
 
   // Smooth position, rotation, and animation phase variables
   const currentPos = useRef(new THREE.Vector3(targetPos[0], targetPos[1], targetPos[2]));
@@ -1534,8 +1538,16 @@ export function PlayerCharacter() {
 
   return (
     <group ref={rootGroupRef} position={[targetPos[0], targetPos[1], targetPos[2]]}>
-      {/* Mounted Motorbike or Bicycle underneath player */}
-      {/* Mounted Supercar, Motorbike or Bicycle underneath player */}
+      {/* Mounted Supercar, Fighter Jet, Motorbike or Bicycle underneath player */}
+      {ridingVehicle === "plane" && (
+        <group position={[0, -0.15, 0]}>
+          <FighterJet
+            speed={vehicleSpeed}
+            altitude={planeAltitude}
+            isAfterburner={isAfterburnerActive}
+          />
+        </group>
+      )}
       {ridingVehicle === "supercar" && (
         <group position={[0, -0.05, 0]}>
           <Supercar

@@ -54,6 +54,8 @@ export const MODELS = {
   PRP_RiceSack: "/models/Props/PRP_RiceSack.fbx",
   PRP_Wallet: "/models/Props/PRP_Wallet.fbx",
   PRP_WaterBottle: "/models/Props/PRP_WaterBottle.fbx",
+  SteelHawk_Fighter: "/models/Vehicles/FighterJet/SteelHawk_Fighter.glb",
+  SteelHawk_Fighter_LOD1: "/models/Vehicles/FighterJet/SteelHawk_Fighter_LOD1.fbx",
   VEH_Bicycle: "/models/Vehicles/VEH_Bicycle.fbx",
   VEH_Motorbike_Blue: "/models/Vehicles/VEH_Motorbike_Blue.fbx",
   VEH_Motorbike_Red: "/models/Vehicles/VEH_Motorbike_Red.fbx",

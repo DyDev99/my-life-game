@@ -33,6 +33,28 @@ export function InteractiveBuilding({
   const language = useGameStore((state) => state.language);
   const isCurrent = currentLocation === locationKey;
 
+  // Track physical building damage state
+  const damagedBuilding = useGameStore((state) => {
+    const bId =
+      locationKey === "school"
+        ? "school_main"
+        : locationKey === "hotel"
+        ? "hotel_main"
+        : locationKey === "pagoda"
+        ? "pagoda_sanctuary"
+        : locationKey === "home"
+        ? "player_home_wall_n"
+        : locationKey === "market"
+        ? "market_stall_1"
+        : locationKey === "cafe"
+        ? "coffee_stall"
+        : null;
+    return bId ? state.damagedBuildings[bId] : null;
+  });
+
+  const isCollapsed = damagedBuilding?.stage === "collapsed";
+  const isHeavy = damagedBuilding?.stage === "heavy";
+
   const groupRef = useRef<THREE.Group>(null);
 
   useFrame((state) => {
@@ -45,8 +67,32 @@ export function InteractiveBuilding({
     }
   });
 
-  const handleClick = (e: { stopPropagation: () => void }) => {
+  const handleClick = (e: { stopPropagation: () => void; shiftKey?: boolean; altKey?: boolean }) => {
     e.stopPropagation();
+    const state = useGameStore.getState();
+
+    // If targeting mode is active, in fighter jet flight, or Shift/Alt held, lock building as attack target
+    if (state.targetingMode || state.ridingVehicle === "plane" || e.shiftKey || e.altKey) {
+      const name =
+        locationKey === "hotel"
+          ? "Grand Hotel"
+          : locationKey === "school"
+          ? "High School"
+          : locationKey === "pagoda"
+          ? "Wat Kampong Cham Pagoda"
+          : locationKey === "stadium"
+          ? "Football Stadium"
+          : locationKey === "market"
+          ? "Central River Market"
+          : locationKey === "cafe"
+          ? "Riverside Cafe"
+          : locationKey === "home"
+          ? "Player Home"
+          : "City Structure";
+      state.pointAndSetTarget(position, name, locationKey);
+      return;
+    }
+
     moveToLocation(locationKey);
     if (locationKey === "school") {
       openModal("work");
@@ -65,10 +111,52 @@ export function InteractiveBuilding({
     }
   };
 
+  // If building has structurally collapsed, render realistic 3D rubble ruin
+  if (isCollapsed) {
+    return (
+      <group position={position} onClick={handleClick}>
+        {/* Collapsed Structural Rubble Mound */}
+        <mesh position={[0, 0.45, 0]} castShadow receiveShadow>
+          <boxGeometry args={[14.0, 0.9, 8.0]} />
+          <meshStandardMaterial color="#334155" roughness={0.95} />
+        </mesh>
+        <mesh position={[2, 0.9, 1]} rotation={[0.3, 0.4, 0.2]} castShadow>
+          <boxGeometry args={[4.5, 0.8, 3.2]} />
+          <meshStandardMaterial color="#475569" roughness={0.9} />
+        </mesh>
+        <mesh position={[-2.5, 0.8, -1.2]} rotation={[-0.2, 0.6, -0.3]} castShadow>
+          <boxGeometry args={[5.0, 0.7, 3.5]} />
+          <meshStandardMaterial color="#1E293B" roughness={0.9} />
+        </mesh>
+        {/* Exposed Twisted Steel Rebars & Shattered Beams */}
+        {[-4, 0, 4].map((rx, ri) => (
+          <mesh key={`rebar-${ri}`} position={[rx, 1.2, 0]} rotation={[0.4, ri * 0.8, 0.5]}>
+            <cylinderGeometry args={[0.04, 0.04, 2.5, 6]} />
+            <meshStandardMaterial color="#78350F" metalness={0.7} />
+          </mesh>
+        ))}
+        {/* Billowing Destruction Smoke */}
+        <mesh position={[0, 3.5, 0]}>
+          <cylinderGeometry args={[2.8, 1.2, 6.0, 8]} />
+          <meshStandardMaterial color="#0F172A" transparent opacity={0.65} roughness={1.0} />
+        </mesh>
+        {/* Flashing Hazard Warning Beacon */}
+        <group position={[0, 2.2, 0]}>
+          <mesh>
+            <octahedronGeometry args={[0.4, 0]} />
+            <meshStandardMaterial color="#EF4444" emissive="#DC2626" emissiveIntensity={2.0} />
+          </mesh>
+          <pointLight color="#EF4444" intensity={2.5} distance={6} />
+        </group>
+      </group>
+    );
+  }
+
   return (
     <group
       ref={groupRef}
       position={position}
+      rotation={isHeavy ? [0.015, 0, -0.025] : [0, 0, 0]}
       onClick={handleClick}
       onPointerOver={(e) => {
         e.stopPropagation();
@@ -94,7 +182,6 @@ export function InteractiveBuilding({
             roughness={0.2}
           />
         </mesh>
-        {/* Soft ground beacon light when active or hovered */}
         {(isCurrent || hovered) && (
           <pointLight color="#F59E0B" intensity={1.2} distance={8} />
         )}
@@ -934,62 +1021,233 @@ export function CoffeeStall({ position = [0, 0, 0] }: { position?: [number, numb
   );
 }
 
-// 7. Mekong River Bridge (ស្ពានទន្លេមេគង្គ)
+// 7. Mekong River Bridge (ស្ពានទន្លេមេគង្គ Kizuna Bridge)
+// Spans across the entire 28m Mekong River with seamless approach ramps, heavy guardrails, and pylons
 export function Bridge({ position = [0, 0, 0] }: { position?: [number, number, number] }) {
+  const timeHour = useGameStore((state) => state.timeHour);
+  const isNight = timeHour < 5.5 || timeHour >= 18.0;
+
   return (
     <group position={position}>
-      <FBXModel
-        url={MODELS.BLD_Bridge}
-        scale={[1.15, 1.0, 3.2]}
-        position={[0, 0, 0]}
-        fallback={
-          <group>
-            {/* Road Deck */}
-            <mesh position={[0, 1.2, 0]} castShadow receiveShadow>
-              <boxGeometry args={[7.0, 0.5, 12.0]} />
-              <meshStandardMaterial color="#B9B5AD" />
+      {/* =================================================================== */}
+      {/* 1. CENTRAL ELEVATED ROAD DECK (Spans z = -12 to +12, length 24m)   */}
+      {/* =================================================================== */}
+      {/* Concrete Base Girder */}
+      <mesh position={[0, 1.15, 0]} castShadow receiveShadow>
+        <boxGeometry args={[7.4, 0.6, 24.0]} />
+        <meshStandardMaterial color="#94A3B8" roughness={0.8} />
+      </mesh>
+
+      {/* Asphalt Driving Surface */}
+      <mesh position={[0, 1.48, 0]} receiveShadow>
+        <boxGeometry args={[6.6, 0.06, 24.0]} />
+        <meshStandardMaterial color="#2B2D33" roughness={0.75} />
+      </mesh>
+
+      {/* Double Yellow Center Dividing Lines */}
+      {[-0.1, 0.1].map((lx, i) => (
+        <mesh key={`center-line-${i}`} position={[lx, 1.515, 0]} receiveShadow>
+          <boxGeometry args={[0.08, 0.01, 24.0]} />
+          <meshStandardMaterial color="#F59E0B" roughness={0.5} />
+        </mesh>
+      ))}
+
+      {/* White Road Shoulder Lines */}
+      {[-3.0, 3.0].map((lx, i) => (
+        <mesh key={`shoulder-line-${i}`} position={[lx, 1.515, 0]} receiveShadow>
+          <boxGeometry args={[0.14, 0.01, 24.0]} />
+          <meshStandardMaterial color="#FFFFFF" roughness={0.4} />
+        </mesh>
+      ))}
+
+      {/* Pedestrian Sidewalk Curbs along Bridge */}
+      {[-3.45, 3.45].map((sx, i) => (
+        <mesh key={`deck-curb-${i}`} position={[sx, 1.54, 0]} receiveShadow>
+          <boxGeometry args={[0.45, 0.12, 24.0]} />
+          <meshStandardMaterial color="#CBD5E1" roughness={0.8} />
+        </mesh>
+      ))}
+
+      {/* =================================================================== */}
+      {/* 2. NORTH APPROACH RAMP (Spans z = -20 to -12, climbs y: 0 -> 1.5m) */}
+      {/* =================================================================== */}
+      <group position={[0, 0.75, -16]} rotation={[0.1853, 0, 0]}>
+        <mesh position={[0, 0, 0]} castShadow receiveShadow>
+          <boxGeometry args={[7.4, 0.55, 8.15]} />
+          <meshStandardMaterial color="#94A3B8" roughness={0.8} />
+        </mesh>
+        <mesh position={[0, 0.28, 0]} receiveShadow>
+          <boxGeometry args={[6.6, 0.06, 8.15]} />
+          <meshStandardMaterial color="#2B2D33" roughness={0.75} />
+        </mesh>
+        {[-0.1, 0.1].map((lx, i) => (
+          <mesh key={`nramp-c-${i}`} position={[lx, 0.315, 0]} receiveShadow>
+            <boxGeometry args={[0.08, 0.01, 8.15]} />
+            <meshStandardMaterial color="#F59E0B" roughness={0.5} />
+          </mesh>
+        ))}
+        {[-3.0, 3.0].map((lx, i) => (
+          <mesh key={`nramp-s-${i}`} position={[lx, 0.315, 0]} receiveShadow>
+            <boxGeometry args={[0.14, 0.01, 8.15]} />
+            <meshStandardMaterial color="#FFFFFF" roughness={0.4} />
+          </mesh>
+        ))}
+      </group>
+
+      {/* =================================================================== */}
+      {/* 3. SOUTH APPROACH RAMP (Spans z = +12 to +18, descends y: 1.5 -> 0m)*/}
+      {/* =================================================================== */}
+      <group position={[0, 0.75, 15]} rotation={[-0.245, 0, 0]}>
+        <mesh position={[0, 0, 0]} castShadow receiveShadow>
+          <boxGeometry args={[7.4, 0.55, 6.18]} />
+          <meshStandardMaterial color="#94A3B8" roughness={0.8} />
+        </mesh>
+        <mesh position={[0, 0.28, 0]} receiveShadow>
+          <boxGeometry args={[6.6, 0.06, 6.18]} />
+          <meshStandardMaterial color="#2B2D33" roughness={0.75} />
+        </mesh>
+        {[-0.1, 0.1].map((lx, i) => (
+          <mesh key={`sramp-c-${i}`} position={[lx, 0.315, 0]} receiveShadow>
+            <boxGeometry args={[0.08, 0.01, 6.18]} />
+            <meshStandardMaterial color="#F59E0B" roughness={0.5} />
+          </mesh>
+        ))}
+        {[-3.0, 3.0].map((lx, i) => (
+          <mesh key={`sramp-s-${i}`} position={[lx, 0.315, 0]} receiveShadow>
+            <boxGeometry args={[0.14, 0.01, 6.18]} />
+            <meshStandardMaterial color="#FFFFFF" roughness={0.4} />
+          </mesh>
+        ))}
+      </group>
+
+      {/* =================================================================== */}
+      {/* 4. SOLID UNBROKEN GUARD RAILS (Left: x = -3.7, Right: x = +3.7)     */}
+      {/* =================================================================== */}
+      {[-3.7, 3.7].map((rx, ri) => (
+        <group key={`guardrail-side-${ri}`}>
+          {/* Main Deck Railing */}
+          <mesh position={[rx, 2.05, 0]} castShadow>
+            <boxGeometry args={[0.22, 1.0, 24.0]} />
+            <meshStandardMaterial color="#F8FAFC" roughness={0.7} />
+          </mesh>
+          <mesh position={[rx, 2.55, 0]} castShadow>
+            <cylinderGeometry args={[0.04, 0.04, 24.0, 8]} />
+            <meshStandardMaterial color="#94A3B8" metalness={0.8} />
+          </mesh>
+
+          {/* North Ramp Railing */}
+          <group position={[rx, 1.35, -16]} rotation={[0.1853, 0, 0]}>
+            <mesh position={[0, 0, 0]} castShadow>
+              <boxGeometry args={[0.22, 1.0, 8.15]} />
+              <meshStandardMaterial color="#F8FAFC" roughness={0.7} />
             </mesh>
-            <mesh position={[0, 1.48, 0]} receiveShadow>
-              <boxGeometry args={[5.8, 0.06, 12.0]} />
-              <meshStandardMaterial color="#4B4D52" />
+            <mesh position={[0, 0.5, 0]} castShadow>
+              <cylinderGeometry args={[0.04, 0.04, 8.15, 8]} />
+              <meshStandardMaterial color="#94A3B8" metalness={0.8} />
             </mesh>
-
-            {/* White Guardrails */}
-            {[-3.4, 3.4].map((x, i) => (
-              <mesh key={`rail-${i}`} position={[x, 2.0, 0]}>
-                <boxGeometry args={[0.2, 0.9, 12.0]} />
-                <meshStandardMaterial color="#FAF8F2" />
-              </mesh>
-            ))}
-
-            {/* Concrete Support Piers down to River Bed */}
-            {[-2.2, 2.2].map((x, i) =>
-              [-3.5, 3.5].map((z, j) => (
-                <mesh key={`pier-${i}-${j}`} position={[x, -0.4, z]}>
-                  <boxGeometry args={[1.4, 3.2, 1.4]} />
-                  <meshStandardMaterial color="#8E8A83" />
-                </mesh>
-              ))
-            )}
-
-            {/* Streetlights on Bridge */}
-            {[-3.4, 3.4].map((x, i) =>
-              [-4, 0, 4].map((z, j) => (
-                <group key={`light-${i}-${j}`} position={[x, 2.5, z]}>
-                  <mesh>
-                    <cylinderGeometry args={[0.04, 0.04, 1.2, 6]} />
-                    <meshStandardMaterial color="#BCC1C7" />
-                  </mesh>
-                  <mesh position={[0, 0.65, 0]}>
-                    <sphereGeometry args={[0.12, 8, 8]} />
-                    <meshStandardMaterial color="#FFF3C8" emissive="#FFF3C8" emissiveIntensity={0.6} />
-                  </mesh>
-                </group>
-              ))
-            )}
           </group>
-        }
-      />
+
+          {/* South Ramp Railing */}
+          <group position={[rx, 1.35, 15]} rotation={[-0.245, 0, 0]}>
+            <mesh position={[0, 0, 0]} castShadow>
+              <boxGeometry args={[0.22, 1.0, 6.18]} />
+              <meshStandardMaterial color="#F8FAFC" roughness={0.7} />
+            </mesh>
+            <mesh position={[0, 0.5, 0]} castShadow>
+              <cylinderGeometry args={[0.04, 0.04, 6.18, 8]} />
+              <meshStandardMaterial color="#94A3B8" metalness={0.8} />
+            </mesh>
+          </group>
+
+          {/* Warning Hazard Markers */}
+          {[-18, -12, -6, 0, 6, 12, 16].map((rz, rzi) => (
+            <mesh
+              key={`hazard-${ri}-${rzi}`}
+              position={[
+                rx > 0 ? rx - 0.12 : rx + 0.12,
+                1.85 + (rz < -12 ? (rz + 20) * 0.185 : rz > 12 ? (18 - rz) * 0.25 : 0),
+                rz,
+              ]}
+            >
+              <boxGeometry args={[0.02, 0.18, 0.35]} />
+              <meshStandardMaterial
+                color={rzi % 2 === 0 ? "#EAB308" : "#DC2626"}
+                emissive={rzi % 2 === 0 ? "#CA8A04" : "#B91C1C"}
+                emissiveIntensity={0.6}
+              />
+            </mesh>
+          ))}
+        </group>
+      ))}
+
+      {/* =================================================================== */}
+      {/* 5. HEAVY RIVER SUPPORT PIERS ANCHORED INTO RIVERBED                 */}
+      {/* =================================================================== */}
+      {[-8.0, 0.0, 8.0].map((pz, pi) => (
+        <group key={`bridge-pier-${pi}`} position={[0, 0, pz]}>
+          <mesh position={[0, 0.7, 0]} castShadow>
+            <boxGeometry args={[7.2, 0.8, 2.2]} />
+            <meshStandardMaterial color="#64748B" roughness={0.9} />
+          </mesh>
+          {[-2.4, 2.4].map((px, pxi) => (
+            <mesh key={`pylon-${pi}-${pxi}`} position={[px, -0.4, 0]} castShadow>
+              <cylinderGeometry args={[0.75, 0.85, 3.2, 12]} />
+              <meshStandardMaterial color="#475569" roughness={0.9} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+
+      {/* =================================================================== */}
+      {/* 6. ORNATE BRIDGE STREETLIGHTS (Night Illumination)                  */}
+      {/* =================================================================== */}
+      {[-3.65, 3.65].map((lx, li) =>
+        [-16, -8, 0, 8, 15].map((lz, lzi) => {
+          const elev = lz < -12 ? (lz + 20) * 0.185 : lz > 12 ? (18 - lz) * 0.25 : 0;
+          return (
+            <group key={`br-light-${li}-${lzi}`} position={[lx, 1.5 + elev, lz]}>
+              <mesh position={[0, 1.2, 0]}>
+                <cylinderGeometry args={[0.04, 0.05, 2.4, 8]} />
+                <meshStandardMaterial color="#334155" metalness={0.7} />
+              </mesh>
+              <mesh position={[lx > 0 ? -0.35 : 0.35, 2.35, 0]}>
+                <sphereGeometry args={[0.16, 10, 10]} />
+                <meshStandardMaterial
+                  color="#FEF08A"
+                  emissive={isNight ? "#FACC15" : "#000000"}
+                  emissiveIntensity={isNight ? 2.5 : 0}
+                />
+              </mesh>
+              {isNight && (
+                <pointLight
+                  position={[lx > 0 ? -0.35 : 0.35, 2.3, 0]}
+                  color="#FEF08A"
+                  intensity={1.8}
+                  distance={10}
+                />
+              )}
+            </group>
+          );
+        })
+      )}
+
+      {/* =================================================================== */}
+      {/* 7. KIZUNA MEKONG BRIDGE ENTRANCE ARCHWAY (ស្ពានគីហ្សូណា)           */}
+      {/* =================================================================== */}
+      <group position={[0, 0, -19.5]}>
+        {[-3.9, 3.9].map((px, pi) => (
+          <group key={`plaque-pillar-${pi}`} position={[px, 0, 0]}>
+            <mesh position={[0, 1.4, 0]} castShadow>
+              <boxGeometry args={[0.7, 2.8, 0.7]} />
+              <meshStandardMaterial color="#E2E8F0" roughness={0.7} />
+            </mesh>
+            <mesh position={[0, 2.9, 0]}>
+              <coneGeometry args={[0.45, 0.6, 8]} />
+              <meshStandardMaterial color="#D4AF37" metalness={0.8} roughness={0.3} />
+            </mesh>
+          </group>
+        ))}
+      </group>
     </group>
   );
 }

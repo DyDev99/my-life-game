@@ -41,10 +41,11 @@ Controls (see `src/game/player/PlayerController.tsx`):
 | F | Mount / dismount nearby vehicle |
 | H / B | Horn / bell |
 | C | Character switcher |
-| P / M | Phone |
+| P | Phone |
+| M | World map (click to set a GPS waypoint, Go = fast travel) |
+| Esc | Close modal · otherwise pause menu (resume, map, settings, main menu) |
 | 1–8 | Travel: home, school, market, cafe, pagoda, hotel, stadium, volleyball |
 | L | Toggle Khmer / English |
-| Esc | Close modal |
 | Mouse click on ground | Walk to point |
 
 **Fighter controls** (characters with `canFight`, currently **Maiko** 🥊):
@@ -71,7 +72,7 @@ my-life-game/
 │   ├── game/                 everything rendered inside the 3D <Canvas>
 │   │   ├── assets/           FBX loading/caching + generated asset path registry
 │   │   ├── audio/  camera/  npc/  physics/  player/  vehicles/
-│   │   └── world/            GameWorld, lighting, buildings/, environment/, sports-city/
+│   │   └── world/            GameWorld, lighting, buildings/, environment/, sports-city/, expansion/ (new districts)
 │   ├── i18n/                 en/km translations
 │   ├── state/                Zustand game store
 │   └── ui/                   DOM overlay: screens/, hud/, modals/

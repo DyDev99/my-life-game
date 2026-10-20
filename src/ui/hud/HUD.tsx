@@ -8,7 +8,6 @@ import {
 } from "@/state/gameStore";
 import type { LocationKey } from "@/data/locations";
 import { translations } from "@/i18n/translations";
-import { audio } from "@/game/audio/audioManager";
 import {
   Volume2,
   VolumeX,
@@ -24,7 +23,6 @@ import {
   Store,
   Coffee,
   Sparkles,
-  Bike,
   Camera,
   DoorOpen,
   LogOut,
@@ -51,11 +49,22 @@ export function HUD() {
   const player = useGameStore((state) => state.player);
   const movementState = useGameStore((state) => state.movementState);
   const currentSpeed = useGameStore((state) => state.currentSpeed);
-  const playerHeading = useGameStore((state) => state.playerHeading);
 
   const ridingVehicle = useGameStore((state) => state.ridingVehicle);
   const vehicleSpeed = useGameStore((state) => state.vehicleSpeed);
   const nearVehicle = useGameStore((state) => state.nearVehicle);
+  const planeAltitude = useGameStore((state) => state.planeAltitude);
+  const isAfterburnerActive = useGameStore((state) => state.isAfterburnerActive);
+  const missileAmmo = useGameStore((state) => state.missileAmmo);
+  const maxMissileAmmo = useGameStore((state) => state.maxMissileAmmo);
+  const triggerFireMissile = useGameStore((state) => state.triggerFireMissile);
+  const replenishMissiles = useGameStore((state) => state.replenishMissiles);
+  const damagedBuildings = useGameStore((state) => state.damagedBuildings);
+  const lockedTarget = useGameStore((state) => state.lockedTarget);
+  const targetingMode = useGameStore((state) => state.targetingMode);
+  const cycleNextTarget = useGameStore((state) => state.cycleNextTarget);
+  const clearLockedTarget = useGameStore((state) => state.clearLockedTarget);
+  const toggleTargetingMode = useGameStore((state) => state.toggleTargetingMode);
   const nearLocation = useGameStore((state) => state.nearLocation);
   const mountVehicle = useGameStore((state) => state.mountVehicle);
   const dismountVehicle = useGameStore((state) => state.dismountVehicle);
@@ -235,16 +244,22 @@ export function HUD() {
             whileTap={{ scale: 0.95 }}
             onClick={() => mountVehicle(nearVehicle)}
             className={`flex items-center gap-2.5 px-6 py-3 rounded-2xl ${
-              nearVehicle === "supercar"
+              nearVehicle === "plane"
+                ? "bg-gradient-to-r from-sky-600 via-indigo-600 to-cyan-500 border border-cyan-300 shadow-cyan-500/50"
+                : nearVehicle === "supercar"
                 ? "bg-gradient-to-r from-red-600 via-rose-600 to-amber-500 border border-yellow-300 shadow-rose-600/50"
                 : "bg-gradient-to-r from-rose-600 to-amber-600 border border-white/30"
             } text-white font-black text-sm shadow-2xl cursor-pointer animate-pulse`}
           >
             <span className="text-xl">
-              {nearVehicle === "supercar" ? "🏎️" : nearVehicle === "motorbike" ? "🏍️" : "🚲"}
+              {nearVehicle === "plane" ? "✈️" : nearVehicle === "supercar" ? "🏎️" : nearVehicle === "motorbike" ? "🏍️" : "🚲"}
             </span>
             <span>
-              {nearVehicle === "supercar"
+              {nearVehicle === "plane"
+                ? language === "km"
+                  ? "ចុច [F] ដើម្បីឡើងជិះយន្តហោះចម្បាំង Steel Hawk"
+                  : "Press [F] or Tap to Board Steel Hawk Fighter Jet"
+                : nearVehicle === "supercar"
                 ? language === "km"
                   ? "ចុច [F] ឬ [E] ដើម្បីបើកបរ Supercar"
                   : "Press [F] or [E] to Enter Supercar"
@@ -419,7 +434,7 @@ export function HUD() {
         )}
 
         {/* Live Sports Match Pill when in Sports City or after scoring */}
-        {(targetPos[2] > 48 || goalsScored > 0 || volleyballRallies > 0) && (
+        {((targetPos[2] > 48 && targetPos[2] < 136 && targetPos[0] > -60 && targetPos[0] < 66) || goalsScored > 0 || volleyballRallies > 0) && (
           <div className="flex items-center gap-3 px-4 py-1.5 rounded-2xl bg-slate-900/90 backdrop-blur-md border border-amber-400/40 text-xs font-bold text-white shadow-xl pointer-events-auto">
             <span className="flex items-center gap-1.5 text-emerald-400 font-mono">
               ⚽ Goals: <span className="text-white font-black text-sm">{goalsScored}</span>
@@ -429,6 +444,95 @@ export function HUD() {
               🏐 Rallies: <span className="text-white font-black text-sm">{volleyballRallies}</span>
             </span>
           </div>
+        )}
+
+        {/* Damaged Targets / Building Destruction Combat Pill */}
+        {Object.keys(damagedBuildings).length > 0 && (
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-rose-950/90 backdrop-blur-md border border-rose-500/60 text-xs font-bold text-white shadow-xl pointer-events-auto">
+            <span className="text-sm">🎯</span>
+            <span className="text-rose-200">
+              {language === "km" ? "អគាររងការខូចខាត:" : "Targets Damaged:"}
+            </span>
+            <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white font-mono font-black text-xs border border-rose-400/50">
+              {Object.keys(damagedBuildings).length}
+            </span>
+            <button
+              onClick={() => useGameStore.getState().repairAllBuildings()}
+              className="ml-2 px-2.5 py-1 rounded-xl bg-amber-500/30 hover:bg-amber-500/50 border border-amber-400/60 text-amber-200 text-[11px] font-black cursor-pointer transition-all flex items-center gap-1"
+              title="Reconstruct all damaged buildings [K]"
+            >
+              <span>🛠️</span>
+              <span>{language === "km" ? "ជួសជុលទីក្រុង [K]" : "Repair City [K]"}</span>
+            </button>
+          </div>
+        )}
+
+        {/* Tactical Target Focus HUD Card */}
+        {lockedTarget && (
+          <motion.div
+            initial={{ scale: 0.9, y: 10, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            className="flex flex-col gap-2 p-3 rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-rose-500/80 shadow-2xl shadow-rose-950/90 pointer-events-auto min-w-[280px] sm:min-w-[320px] max-w-sm"
+          >
+            {/* Header: Target Name & Lock Badge */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-3 w-3 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500" />
+                </span>
+                <span className="text-xs sm:text-sm font-black text-white tracking-wide truncate max-w-[170px]">
+                  {lockedTarget.name}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-rose-600/30 border border-rose-400/60 text-rose-300 font-mono text-[10px] sm:text-[11px] font-black">
+                <span>🔒 {language === "km" ? "ចាក់សោរ" : "LOCKED"}</span>
+              </div>
+            </div>
+
+            {/* Range & Destruction Statistics */}
+            <div className="flex items-center justify-between text-[11px] font-mono text-slate-300 bg-black/40 px-2.5 py-1 rounded-xl border border-white/10">
+              <span className="text-amber-400 font-bold">
+                RANGE: {Math.round(Math.hypot(targetPos[0] - lockedTarget.position[0], targetPos[2] - lockedTarget.position[2]))}m
+              </span>
+              <span className="text-rose-400 font-bold">
+                HITS: {damagedBuildings[lockedTarget.id]?.hits || 0}
+              </span>
+            </div>
+
+            {/* Quick Tactical Action Buttons */}
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <button
+                onClick={() => triggerFireMissile()}
+                disabled={missileAmmo <= 0}
+                className={`flex-1 py-1.5 px-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition-all ${
+                  missileAmmo > 0
+                    ? "bg-gradient-to-r from-red-600 via-rose-600 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white border border-amber-300/80 animate-pulse"
+                    : "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed"
+                }`}
+                title="Launch Guided Homing Missile at Target [J] or [Enter]"
+              >
+                <span>🚀</span>
+                <span>{language === "km" ? "បាញ់ប្រហារ [J]" : "STRIKE [J]"}</span>
+              </button>
+
+              <button
+                onClick={() => cycleNextTarget()}
+                className="py-1.5 px-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-slate-200 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                title="Cycle to Next Target [Tab]"
+              >
+                <span>🎯 Next [Tab]</span>
+              </button>
+
+              <button
+                onClick={() => clearLockedTarget()}
+                className="p-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/40 border border-rose-500/40 text-rose-300 text-xs font-bold transition-all cursor-pointer"
+                title="Unlock Target [X]"
+              >
+                ✕
+              </button>
+            </div>
+          </motion.div>
         )}
       </div>
 
@@ -453,21 +557,32 @@ export function HUD() {
 
       {/* Bottom Main Action Bar */}
       <div className="flex flex-col items-center gap-2 sm:gap-3 w-full max-w-md mx-auto pointer-events-auto pb-1 sm:pb-3">
-        {/* VEHICLE DRIVING DASHBOARD (GTA-Style) */}
+        {/* VEHICLE & FLIGHT DASHBOARD */}
         {ridingVehicle ? (
           <div className="w-full p-3 rounded-3xl bg-slate-900/90 backdrop-blur-md border border-amber-400/50 shadow-2xl flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              {/* Speedometer */}
+              {/* Flight / Drive Instruments */}
               <div className="flex items-center gap-2.5">
                 <span className="text-2xl">
-                  {ridingVehicle === "supercar" ? "🏎️" : ridingVehicle === "motorbike" ? "🏍️" : "🚲"}
+                  {ridingVehicle === "plane" ? "✈️" : ridingVehicle === "supercar" ? "🏎️" : ridingVehicle === "motorbike" ? "🏍️" : "🚲"}
                 </span>
                 <div>
-                  <div className="text-lg sm:text-xl font-black text-amber-400 font-mono">
-                    {vehicleSpeed} <span className="text-xs text-slate-400 font-sans font-normal">km/h</span>
+                  <div className="flex items-center gap-3">
+                    <div className="text-lg sm:text-xl font-black text-amber-400 font-mono">
+                      {vehicleSpeed} <span className="text-xs text-slate-400 font-sans font-normal">km/h</span>
+                    </div>
+                    {ridingVehicle === "plane" && (
+                      <div className="text-sm font-bold text-cyan-300 font-mono bg-cyan-950/60 px-2 py-0.5 rounded-lg border border-cyan-500/40">
+                        ALT: {Math.round(planeAltitude)} m
+                      </div>
+                    )}
                   </div>
                   <div className="text-[10px] text-amber-300/80 font-bold uppercase tracking-wider">
-                    {ridingVehicle === "supercar"
+                    {ridingVehicle === "plane"
+                      ? isAfterburnerActive
+                        ? "🔥 Afterburner Boost Active"
+                        : "Steel Hawk Combat Flight"
+                      : ridingVehicle === "supercar"
                       ? "Supercar Sport Drive"
                       : ridingVehicle === "motorbike"
                       ? "Motorbike Riding"
@@ -476,54 +591,155 @@ export function HUD() {
                 </div>
               </div>
 
-              {/* Vehicle Actions: Horn & Dismount */}
-              <div className="flex items-center gap-2">
+              {/* Vehicle Actions: Horn, Target Focus, Missile Fire & Dismount */}
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                {ridingVehicle === "plane" && (
+                  <>
+                    <button
+                      onClick={() => cycleNextTarget()}
+                      className={`px-2.5 py-1.5 rounded-xl font-bold text-xs border flex items-center gap-1 cursor-pointer transition-all ${
+                        lockedTarget
+                          ? "bg-rose-600/30 border-rose-400 text-rose-300 shadow-sm"
+                          : "bg-white/10 hover:bg-white/20 border-white/20 text-slate-300"
+                      }`}
+                      title="Cycle / Lock Attack Target [Tab]"
+                    >
+                      <span>🎯</span>
+                      <span className="hidden sm:inline">{lockedTarget ? "Next [Tab]" : "Target [Tab]"}</span>
+                    </button>
+                    <button
+                      onClick={() => triggerFireMissile()}
+                      disabled={missileAmmo <= 0}
+                      className={`px-3 py-1.5 rounded-xl font-black text-xs border flex items-center gap-1.5 cursor-pointer shadow-lg transition-all ${
+                        missileAmmo > 0
+                          ? "bg-gradient-to-r from-red-600 via-rose-600 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white border-amber-300 shadow-rose-600/50 animate-pulse"
+                          : "bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed opacity-60"
+                      }`}
+                      title={lockedTarget ? "Fire Guided Homing Missile [J]" : "Fire Air-to-Ground Missile [J]"}
+                    >
+                      <span className="text-sm">🚀</span>
+                      <span>{language === "km" ? "បាញ់មីស៊ីល" : lockedTarget ? "Fire Guided" : "Fire Missile"}</span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-black/40 text-[10px] font-mono border border-white/20">
+                        {missileAmmo}/{maxMissileAmmo}
+                      </span>
+                    </button>
+                    {missileAmmo === 0 && (
+                      <button
+                        onClick={() => {
+                          replenishMissiles();
+                          useGameStore.getState().addStatPop(
+                            language === "km" ? "ផ្ទុកគ្រាប់មីស៊ីលពេញវិញ (8/8) 🚀" : "Missiles Reloaded (8/8) 🚀",
+                            "skill"
+                          );
+                        }}
+                        className="px-2 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400/50 text-amber-300 text-xs font-bold transition-all cursor-pointer"
+                        title="Reload Missiles [R]"
+                      >
+                        🔄 Reload
+                      </button>
+                    )}
+                  </>
+                )}
+                {ridingVehicle !== "plane" && (
+                  <button
+                    onClick={ringVehicleHornOrBell}
+                    className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 font-bold text-xs border border-amber-400/40 flex items-center gap-1 cursor-pointer"
+                  >
+                    {ridingVehicle === "bicycle" ? <Bell className="w-3.5 h-3.5" /> : <Megaphone className="w-3.5 h-3.5" />}
+                    <span>{ridingVehicle === "bicycle" ? (language === "km" ? "កណ្ដឹង [B]" : "Bell [B]") : (language === "km" ? "ស៊ីផ្លេ [H]" : "Horn [H]")}</span>
+                  </button>
+                )}
                 <button
-                  onClick={ringVehicleHornOrBell}
-                  className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 font-bold text-xs border border-amber-400/40 flex items-center gap-1 cursor-pointer"
+                  onClick={() => useGameStore.getState().recoverVehicle()}
+                  className="px-3 py-1.5 rounded-xl bg-sky-600/30 hover:bg-sky-600/50 text-sky-200 font-bold text-xs border border-sky-400/40 flex items-center gap-1 cursor-pointer"
+                  title="Reset vehicle safely to nearest road [U]"
                 >
-                  {ridingVehicle === "bicycle" ? <Bell className="w-3.5 h-3.5" /> : <Megaphone className="w-3.5 h-3.5" />}
-                  <span>{ridingVehicle === "bicycle" ? (language === "km" ? "កណ្ដឹង [B]" : "Bell [B]") : (language === "km" ? "ស៊ីផ្លេ [H]" : "Horn [H]")}</span>
+                  <span>🔄</span>
+                  <span>{language === "km" ? "សង្គ្រោះ [U]" : "Recover [U]"}</span>
                 </button>
                 <button
                   onClick={dismountVehicle}
                   className="px-3 py-1.5 rounded-xl bg-rose-600/30 hover:bg-rose-600/50 text-rose-300 font-bold text-xs border border-rose-500/40 flex items-center gap-1 cursor-pointer"
                 >
                   <LogOut className="w-3.5 h-3.5" />
-                  <span>Exit [F]</span>
+                  <span>{ridingVehicle === "plane" ? (language === "km" ? "ចុះចត [F]" : "Land / Exit [F]") : "Exit [F]"}</span>
                 </button>
               </div>
             </div>
 
-            {/* Driving Keys Tip */}
+            {/* Driving / Flying Keys Tip */}
             <div className="text-[10px] text-slate-300 text-center font-medium bg-black/30 py-1 rounded-lg">
-              <kbd className="px-1 rounded bg-white/10 text-white">W</kbd> Gas • <kbd className="px-1 rounded bg-white/10 text-white">S</kbd> Brake • <kbd className="px-1 rounded bg-white/10 text-white">Space</kbd> {ridingVehicle === "supercar" ? "Drift Skid" : "Brake"} • <kbd className="px-1 rounded bg-white/10 text-white">A/D</kbd> Steer • <kbd className="px-1 rounded bg-white/10 text-white">{ridingVehicle === "bicycle" ? "B" : "H"}</kbd> {ridingVehicle === "bicycle" ? "Bell" : "Horn"} • <kbd className="px-1 rounded bg-white/10 text-white">F/E</kbd> Exit
+              {ridingVehicle === "plane" ? (
+                <>
+                  <kbd className="px-1 rounded bg-white/10 text-white">Tab</kbd> Target •{" "}
+                  <kbd className="px-1 rounded bg-white/10 text-white">J/Enter</kbd> Guided Missile •{" "}
+                  <kbd className="px-1 rounded bg-white/10 text-white">X</kbd> Unlock •{" "}
+                  <kbd className="px-1 rounded bg-white/10 text-white">R</kbd> Reload •{" "}
+                  <kbd className="px-1 rounded bg-white/10 text-white">W/S</kbd> Speed •{" "}
+                  <kbd className="px-1 rounded bg-white/10 text-white">Space</kbd> Climb •{" "}
+                  <kbd className="px-1 rounded bg-white/10 text-white">Q/C</kbd> Dive •{" "}
+                  <kbd className="px-1 rounded bg-white/10 text-white">A/D</kbd> Bank •{" "}
+                  <kbd className="px-1 rounded bg-white/10 text-white">Shift</kbd> Boost •{" "}
+                  <kbd className="px-1 rounded bg-white/10 text-white">F</kbd> Land
+                </>
+              ) : (
+                <>
+                  <kbd className="px-1 rounded bg-white/10 text-white">W</kbd> Gas •{" "}
+                  <kbd className="px-1 rounded bg-white/10 text-white">S</kbd> Brake •{" "}
+                  <kbd className="px-1 rounded bg-white/10 text-white">Space</kbd>{" "}
+                  {ridingVehicle === "supercar" ? "Drift Skid" : "Brake"} •{" "}
+                  <kbd className="px-1 rounded bg-white/10 text-white">A/D</kbd> Steer •{" "}
+                  <kbd className="px-1 rounded bg-white/10 text-white">{ridingVehicle === "bicycle" ? "B" : "H"}</kbd>{" "}
+                  {ridingVehicle === "bicycle" ? "Bell" : "Horn"} •{" "}
+                  <kbd className="px-1 rounded bg-white/10 text-white">U</kbd> Recover •{" "}
+                  <kbd className="px-1 rounded bg-white/10 text-white">F/E</kbd> Exit
+                </>
+              )}
             </div>
           </div>
         ) : (
           <>
             {/* Quick Vehicle Ride Bar (Always Accessible) */}
-            <div className="flex items-center gap-2 w-full justify-center">
+            <div className="flex items-center gap-1.5 w-full justify-center">
+              <button
+                onClick={() => mountVehicle("plane")}
+                className="flex-1 py-1.5 px-2 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 border border-cyan-300/50 text-xs font-bold text-white flex items-center justify-center gap-1 shadow-md cursor-pointer transition-all"
+              >
+                <span>✈️</span>
+                <span>{language === "km" ? "យន្តហោះ" : "Fighter Jet"}</span>
+              </button>
               <button
                 onClick={() => mountVehicle("supercar")}
-                className="flex-1 py-1.5 px-2.5 rounded-xl bg-gradient-to-r from-rose-700/80 to-amber-600/80 hover:from-rose-600 hover:to-amber-500 border border-yellow-400/40 text-xs font-bold text-white flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all"
+                className="flex-1 py-1.5 px-2 rounded-xl bg-gradient-to-r from-rose-700/80 to-amber-600/80 hover:from-rose-600 hover:to-amber-500 border border-yellow-400/40 text-xs font-bold text-white flex items-center justify-center gap-1 shadow-md cursor-pointer transition-all"
               >
                 <span>🏎️</span>
-                <span>{language === "km" ? "បើក Supercar" : "Supercar [F]"}</span>
+                <span>Supercar</span>
               </button>
               <button
                 onClick={() => mountVehicle("motorbike")}
-                className="flex-1 py-1.5 px-2.5 rounded-xl bg-slate-900/80 hover:bg-rose-600/80 border border-white/20 text-xs font-bold text-white flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all"
+                className="flex-1 py-1.5 px-2 rounded-xl bg-slate-900/80 hover:bg-rose-600/80 border border-white/20 text-xs font-bold text-white flex items-center justify-center gap-1 shadow-md cursor-pointer transition-all"
               >
                 <span>🏍️</span>
-                <span>{language === "km" ? "ជិះម៉ូតូ" : "Motorbike"}</span>
+                <span>{language === "km" ? "ម៉ូតូ" : "Motorbike"}</span>
               </button>
               <button
                 onClick={() => mountVehicle("bicycle")}
-                className="flex-1 py-1.5 px-2.5 rounded-xl bg-slate-900/80 hover:bg-sky-600/80 border border-white/20 text-xs font-bold text-white flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all"
+                className="flex-1 py-1.5 px-2 rounded-xl bg-slate-900/80 hover:bg-sky-600/80 border border-white/20 text-xs font-bold text-white flex items-center justify-center gap-1 shadow-md cursor-pointer transition-all"
               >
                 <span>🚲</span>
-                <span>{language === "km" ? "ជិះកង់" : "Bicycle"}</span>
+                <span>{language === "km" ? "កង់" : "Bicycle"}</span>
+              </button>
+              <button
+                onClick={() => cycleNextTarget()}
+                className={`py-1.5 px-2.5 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-md cursor-pointer ${
+                  lockedTarget
+                    ? "bg-rose-600/40 border-rose-400 text-rose-200"
+                    : "bg-slate-900/80 hover:bg-rose-950/60 border-white/20 text-slate-200"
+                }`}
+                title="Lock on target to attack [Tab]"
+              >
+                <span>🎯</span>
+                <span>{lockedTarget ? (language === "km" ? "ដូរគោលដៅ" : "Target") : (language === "km" ? "ចាក់សោរ" : "Lock")}</span>
               </button>
             </div>
 
@@ -534,6 +750,10 @@ export function HUD() {
                 <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-mono text-[10px]">W</kbd><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-mono text-[10px]">A</kbd><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-mono text-[10px]">S</kbd><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-mono text-[10px]">D</kbd> Move</span>
                 <span>•</span>
                 <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-mono text-[10px]">Shift</kbd> Run</span>
+                <span>•</span>
+                <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-mono text-[10px]">Tab</kbd> Target</span>
+                <span>•</span>
+                <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-mono text-[10px]">J</kbd> Strike</span>
                 <span>•</span>
                 <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-mono text-[10px]">C</kbd> Switch</span>
                 <span>•</span>

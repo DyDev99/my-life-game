@@ -55,6 +55,14 @@ game/audio, game/physics  ◄── module singletons (`audio`, `collisionWorld`
 - `loadFBX(url)` caches parsed models; `FBXModel` clones per instance with `SkeletonUtils.clone`. Materials are replaced with `MeshStandardMaterial` by name heuristics (`enhanceMaterial`).
 - Every FBX use has a procedural fallback mesh, so a missing file shows the fallback instead of crashing. Check the Network tab for 404s.
 
+## World layout and expanded city
+
+- `data/cityLayout.ts` is the single source for everything outside the original town: world bounds, districts, roads, generated buildings/trees/lamps (seeded, deterministic), river, lake and landmarks.
+- Consumers: `game/world/expansion/ExpandedCity.tsx` (instanced rendering), `physics/collisionSystem.ts` (`registerExpandedCityColliders`), `data/mapLayout.ts` (minimap + world map) and `PlayerController` (movement bounds).
+- Rendering: one `InstancedMesh` per district × part (bodies, roofs, trunks, crowns), with windows from a world-space shader (`expansion/cityMaterials.ts`) that light up at night. District groups are hidden beyond the fog distance for the current graphics preset (`expansion/viewDistance.ts`).
+- City buildings are destructible like the original ones: a collapsed collider id (`city_<district>_<n>`) drops to rubble in the instanced mesh.
+- Change the city by editing the layout data; never hand-place meshes in `ExpandedCity`.
+
 ## Known structural debt
 
 | Item | Where | Direction |
@@ -62,7 +70,7 @@ game/audio, game/physics  ◄── module singletons (`audio`, `collisionWorld`
 | God store (1.1k lines) | `state/gameStore.ts` | Split into slices (session, player, time, movement, vehicle, activity, sports) behind the same `useGameStore` API; move rules into pure `state/rules/*` |
 | Store calls `audio` | `state/gameStore.ts` | Move sound triggers to the UI/game layer |
 | Large multi-component files | `vehicles/VehiclesAndCharacters.tsx`, `world/buildings/Buildings.tsx`, `world/sports-city/SportsCity.tsx` | One component per file inside the same folder |
-| Hard-coded coordinates | world components + `physics/collisionSystem.ts` | Derive colliders and positions from `data/locations.ts` / a layout data file |
+| Hard-coded coordinates | original-town world components + `physics/collisionSystem.ts` | Expanded districts already follow the target pattern (below); migrate the original town into the same layout data |
 | Extended character bios | `ui/modals/CharacterSwitcherModal.tsx` | Merge into `data/characters.ts` |
 
 ## Next steps

@@ -180,6 +180,7 @@ export function ClipCharacterAvatar({
 
   // Seat offset when riding (no sitting clip: crouch pose lowered onto the seat).
   const seatOffset = useMemo<[number, number, number]>(() => {
+    if (ridingVehicle === "plane") return [0, -0.42, 1.8];
     if (ridingVehicle === "supercar") return [-0.38, -0.55, 0];
     if (ridingVehicle) return [0, -0.3, -0.1];
     return [0, 0, 0];

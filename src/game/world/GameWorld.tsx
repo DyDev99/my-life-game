@@ -26,7 +26,7 @@ import {
   RiverWater,
   GroundEnvironment,
 } from "@/game/world/environment/Environment";
-import { Motorbike, RemorkTukTuk, Bicycle, Supercar, PlayerCharacter } from "@/game/vehicles/VehiclesAndCharacters";
+import { Motorbike, RemorkTukTuk, Bicycle, Supercar, FighterJet, PlayerCharacter } from "@/game/vehicles/VehiclesAndCharacters";
 
 import { useGameStore } from "@/state/gameStore";
 
@@ -34,11 +34,22 @@ import { DayNightLighting } from "@/game/world/DayNightLighting";
 import { NPCSystem } from "@/game/npc/NPCSystem";
 import { SportsCity } from "@/game/world/sports-city/SportsCity";
 import { CityTrafficSystem } from "@/game/npc/CityTrafficSystem";
+import { MissileSystem } from "@/game/combat/MissileSystem";
+import { ShootingSystem } from "@/game/combat/ShootingSystem";
+import { PracticeTargets } from "@/game/combat/PracticeTargets";
+import { WeaponModel } from "@/game/combat/WeaponModel";
+import { WaypointBeacon } from "@/game/navigation/WaypointBeacon";
+import { ExpandedCity } from "@/game/world/expansion/ExpandedCity";
 
 export function GameWorld() {
   const ridingVehicle = useGameStore((state) => state.ridingVehicle);
   const supercarPos = useGameStore((state) => state.supercarPos);
   const supercarHeading = useGameStore((state) => state.supercarHeading);
+  const planePos = useGameStore((state) => state.planePos);
+  const planeHeading = useGameStore((state) => state.planeHeading);
+  const targetPos = useGameStore((state) => state.targetPos);
+  const playerHeading = useGameStore((state) => state.playerHeading);
+
 
   return (
     <group>
@@ -56,6 +67,12 @@ export function GameWorld() {
       {/* OLYMPIC SPORTS CITY (FOOTBALL STADIUM & VOLLEYBALL DISTRICT) */}
       {/* ===================================================================== */}
       <SportsCity />
+
+      {/* Expanded districts around the original town (data/cityLayout.ts) */}
+      <ExpandedCity />
+
+      {/* GPS waypoint marker */}
+      <WaypointBeacon />
 
       {/* ===================================================================== */}
       {/* 1. PUBLIC INSTITUTIONS & RESIDENTIAL */}
@@ -178,6 +195,16 @@ export function GameWorld() {
         />
       )}
 
+      {/* 2. Steel Hawk Fighter Jet (Parked at Riverside Airfield Plaza when not being flown) */}
+      {ridingVehicle !== "plane" && (
+        <FighterJet
+          position={planePos}
+          rotation={[0, planeHeading, 0]}
+          speed={0}
+          altitude={0}
+        />
+      )}
+
       {/* 2. Motorbike */}
       {ridingVehicle !== "motorbike" && (
         <Motorbike position={[8, 0, -14.2]} rotation={[0, Math.PI / 2, 0]} color="#B3262E" />
@@ -203,6 +230,19 @@ export function GameWorld() {
 
       {/* Dynamic City Traffic & Fleet of Vehicles (Supercars, Sedans, Tuk-Tuks, Motorbikes) */}
       <CityTrafficSystem />
+
+      {/* 3D Weapon Model Attached to Player Character */}
+      <WeaponModel playerPos={targetPos} playerHeading={playerHeading} />
+
+      {/* Interactive 3D Practice Targets */}
+      <PracticeTargets />
+
+      {/* Two-Stage Mobile Shooting & Raycast Detection System */}
+      <ShootingSystem />
+
+      {/* Air Combat Missile System & Building Destruction Effects */}
+      <MissileSystem />
     </group>
   );
 }
+

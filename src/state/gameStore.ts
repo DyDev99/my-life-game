@@ -15,6 +15,58 @@ import {
   nextCombo,
   trainingReward,
 } from "@/state/rules/combat";
+import { type WeaponId, WEAPON_REGISTRY } from "@/game/combat/weaponConfig";
+import { BUILDING_REGISTRY, getBuildingDamageStage, type DamageStage } from "@/game/physics/buildingDestruction";
+import { collisionWorld, findNearestRoadPoint } from "@/game/physics/collisionSystem";
+import { type GraphicsQuality, loadSettings, saveSettings } from "@/state/settingsStorage";
+
+export interface DamagedBuildingState {
+  id: string;
+  name: string;
+  hits: number;
+  hp: number;
+  maxHp: number;
+  stage: DamageStage;
+  lastHitPos: [number, number, number];
+  category?: string;
+  debrisColor?: string;
+}
+
+export interface PracticeTarget {
+  id: string;
+  name: string;
+  position: [number, number, number];
+  health: number;
+  maxHealth: number;
+  destroyed: boolean;
+}
+
+export interface AttackTarget {
+  id: string;
+  name: string;
+  position: [number, number, number];
+  distance?: number;
+  height?: number;
+  radius?: number;
+}
+
+export const ATTACK_TARGET_LOCATIONS: Array<{
+  id: string;
+  name: string;
+  nameKm: string;
+  pos: [number, number, number];
+}> = [
+  { id: "hotel", name: "Grand Hotel", nameKm: "សណ្ឋាគារហ្គ្រេន", pos: [18, 0, -22] },
+  { id: "school", name: "High School", nameKm: "សាលាវិទ្យាល័យ", pos: [0, 0, -2] },
+  { id: "pagoda", name: "Wat Kampong Cham Pagoda", nameKm: "វត្តអារាមកំពង់ចាម", pos: [-11, 0, 18] },
+  { id: "stadium", name: "Olympic Football Stadium", nameKm: "ពហុកីឡដ្ឋាន", pos: [-26, 0, 95] },
+  { id: "market", name: "Central River Market", nameKm: "ផ្សារមាត់ទន្លេ", pos: [13, 0, -12] },
+  { id: "cafe", name: "Riverside Cafe", nameKm: "តូបកាហ្វេមាត់ទន្លេ", pos: [-6, 0, -12] },
+  { id: "townhall", name: "Town Hall & Offices", nameKm: "សាលាខេត្ត", pos: [-42, 0, -10] },
+  { id: "volleyball", name: "Volleyball Arena", nameKm: "តារាងបាល់ទះ", pos: [26, 0, 92] },
+  { id: "sports_clubhouse", name: "Sports Locker Clubhouse", nameKm: "ក្លឹបកីឡា", pos: [6, 0, 78] },
+  { id: "home", name: "Player Home", nameKm: "ផ្ទះ", pos: [-14, 0, -20] },
+];
 
 export type CareerType = "Teacher" | "Developer" | "Farmer" | "ShopOwner" | "Kickboxer";
 
@@ -132,19 +184,112 @@ interface GameState {
   };
   lastDaySummary: DaySummaryData | null;
 
-  // Vehicles (Supercar, Motorbike & Bicycle)
-  ridingVehicle: "motorbike" | "bicycle" | "supercar" | null;
+  // Vehicles (Fighter Jet, Supercar, Motorbike & Bicycle)
+  ridingVehicle: "motorbike" | "bicycle" | "supercar" | "plane" | null;
   vehicleSpeed: number;
-  nearVehicle: "motorbike" | "bicycle" | "supercar" | null;
+  nearVehicle: "motorbike" | "bicycle" | "supercar" | "plane" | null;
   supercarPos: [number, number, number];
   supercarHeading: number;
+  planePos: [number, number, number];
+  planeHeading: number;
+  planeAltitude: number;
+  isAfterburnerActive: boolean;
   enterVehicleAnimation: boolean;
+
+  // Combat & Missile Weapon Systems
+  missileAmmo: number;
+  maxMissileAmmo: number;
+  fireMissileTrigger: number;
+  triggerFireMissile: () => boolean;
+  replenishMissiles: () => void;
+  damagedBuildings: Record<string, DamagedBuildingState>;
+  damageBuildingWithAmount: (
+    buildingId: string,
+    amount: number,
+    hitPos: [number, number, number],
+    name?: string,
+    source?: "vehicle" | "missile" | "bullet"
+  ) => void;
+  damageBuilding: (buildingId: string, hitPos: [number, number, number], name?: string) => void;
+  repairAllBuildings: () => void;
+  recoverVehicle: () => void;
+
+  cameraShake: number;
+  triggerCameraShake: (intensity?: number) => void;
+
+  // Target Focus & Lock-on System
+  lockedTarget: AttackTarget | null;
+  targetingMode: boolean;
+  setLockedTarget: (target: AttackTarget | null) => void;
+  toggleTargetingMode: (active?: boolean) => void;
+  cycleNextTarget: () => void;
+  clearLockedTarget: () => void;
+  pointAndSetTarget: (pos: [number, number, number], name?: string, id?: string) => void;
 
   // Camera & Face Direction
   playerHeading: number; // yaw in radians
   cameraMode: "chase" | "isometric";
   setPlayerHeading: (heading: number) => void;
   toggleCameraMode: () => void;
+
+  // Shooter & Mobile Aiming System
+  currentWeaponId: WeaponId | null;
+  weaponAmmo: Record<WeaponId, { inMag: number; reserve: number }>;
+  isAiming: boolean;
+  isReloading: boolean;
+  crosshairSpread: number;
+  cameraPitch: number;
+  cameraYaw: number;
+  cameraSensitivity: { touchLook: number; aimLook: number; adsLook: number };
+  lastHitInfo: {
+    hitPoint: [number, number, number];
+    damage: number;
+    isHeadshot: boolean;
+    targetId: string;
+    time: number;
+  } | null;
+  practiceTargets: Record<string, PracticeTarget>;
+  equipWeapon: (id: WeaponId | null) => void;
+  setAiming: (aim: boolean) => void;
+  startReload: () => void;
+  finishReload: (id: WeaponId) => void;
+  consumeAmmo: (id: WeaponId, count?: number) => boolean;
+  damagePracticeTarget: (
+    targetId: string,
+    damage: number,
+    hitPos: [number, number, number],
+    isHeadshot?: boolean
+  ) => void;
+  resetPracticeTargets: () => void;
+  setCameraSensitivity: (sens: Partial<{ touchLook: number; aimLook: number; adsLook: number }>) => void;
+  setCameraAngles: (yaw: number, pitch: number) => void;
+
+  // Device & Control Mode
+  deviceControlMode: "auto" | "computer" | "mobile";
+  showTouchZoneGuide: boolean;
+  isPointerLocked: boolean;
+  setDeviceControlMode: (mode: "auto" | "computer" | "mobile") => void;
+  setShowTouchZoneGuide: (show: boolean) => void;
+  toggleTouchZoneGuide: () => void;
+  setIsPointerLocked: (locked: boolean) => void;
+
+  // Pause / full map / settings. Any non-null value freezes the game loop.
+  pauseScreen: "menu" | "settings" | "map" | null;
+  setPauseScreen: (screen: "menu" | "settings" | "map" | null) => void;
+  togglePause: () => void;
+
+  // GPS waypoint (world X, Z)
+  waypoint: { x: number; z: number; label: string } | null;
+  setWaypoint: (waypoint: { x: number; z: number; label: string } | null) => void;
+
+  // Graphics & look settings (persisted to localStorage)
+  graphicsQuality: GraphicsQuality;
+  shadowsEnabled: boolean;
+  lookSensitivityScale: number;
+  setGraphicsQuality: (quality: GraphicsQuality) => void;
+  setShadowsEnabled: (enabled: boolean) => void;
+  setLookSensitivityScale: (scale: number) => void;
+  hydrateSettings: () => void;
 
   // Actions
   setScreen: (screen: "main_menu" | "character_creation" | "game_world") => void;
@@ -154,11 +299,13 @@ interface GameState {
   setNearLocation: (loc: LocationKey | null) => void;
   enterLocation: (loc?: LocationKey) => void;
   setTargetPosition: (pos: [number, number, number]) => void;
-  mountVehicle: (v: "motorbike" | "bicycle" | "supercar") => void;
+  mountVehicle: (v: "motorbike" | "bicycle" | "supercar" | "plane") => void;
   dismountVehicle: () => void;
-  setNearVehicle: (v: "motorbike" | "bicycle" | "supercar" | null) => void;
+  setNearVehicle: (v: "motorbike" | "bicycle" | "supercar" | "plane" | null) => void;
   setVehicleSpeed: (spd: number) => void;
   setSupercarPosition: (pos: [number, number, number], heading?: number) => void;
+  setPlanePosition: (pos: [number, number, number], heading?: number, altitude?: number) => void;
+  setAfterburnerActive: (active: boolean) => void;
   setEnterVehicleAnimation: (anim: boolean) => void;
   ringVehicleHornOrBell: () => void;
   isPlayerHomeDoorOpen: boolean;
@@ -169,6 +316,8 @@ interface GameState {
 
   startNewGame: (profile: PlayerProfile) => void;
   moveToLocation: (loc: LocationKey) => void;
+  /** Fast travel to an arbitrary on-foot point (map destinations outside the story locations). */
+  teleportTo: (x: number, z: number) => void;
   addStatPop: (text: string, type: StatPop["type"]) => void;
   removeStatPop: (id: string) => void;
 
@@ -245,6 +394,24 @@ const INITIAL_INVENTORY = [
   { id: "coffee", nameEn: "Iced Milk Coffee", nameKm: "កាហ្វេទឹកដោះគោ", icon: SPRITES.inv_icedcoffee, count: 1 },
 ];
 
+const DEFAULT_CAMERA_SENSITIVITY = {
+  touchLook: 0.0055,
+  aimLook: 0.0038,
+  adsLook: 0.0022,
+};
+
+function scaledSensitivity(scale: number) {
+  return {
+    touchLook: DEFAULT_CAMERA_SENSITIVITY.touchLook * scale,
+    aimLook: DEFAULT_CAMERA_SENSITIVITY.aimLook * scale,
+    adsLook: DEFAULT_CAMERA_SENSITIVITY.adsLook * scale,
+  };
+}
+
+function persistSettings(s: Pick<GameState, "graphicsQuality" | "shadowsEnabled" | "lookSensitivityScale">) {
+  saveSettings({ quality: s.graphicsQuality, shadows: s.shadowsEnabled, lookScale: s.lookSensitivityScale });
+}
+
 export const useGameStore = create<GameState>((set, get) => ({
   screen: "main_menu",
   activeModal: null,
@@ -304,7 +471,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setScreen: (screen) => {
     audio.playClick();
-    set({ screen });
+    set({ screen, pauseScreen: null });
   },
 
   openModal: (modal) => {
@@ -341,13 +508,239 @@ export const useGameStore = create<GameState>((set, get) => ({
   ridingVehicle: null,
   vehicleSpeed: 0,
   nearVehicle: null,
-  supercarPos: [18, 0, -22],
+  supercarPos: [22.5, 0, -18],
   supercarHeading: 0,
+  planePos: [42, 0, 22],
+  planeHeading: Math.PI,
+  planeAltitude: 0,
+  isAfterburnerActive: false,
   enterVehicleAnimation: false,
+
+  missileAmmo: 8,
+  maxMissileAmmo: 8,
+  fireMissileTrigger: 0,
+  damagedBuildings: {},
+
+  triggerFireMissile: () => {
+    const ammo = get().missileAmmo;
+    if (ammo <= 0) {
+      const isKm = get().language === "km";
+      get().addStatPop(isKm ? "អស់គ្រាប់មីស៊ីលហើយ! ⚠️" : "Out of Missiles! ⚠️", "stress");
+      return false;
+    }
+    audio.playMissileLaunch();
+    set((state) => ({
+      missileAmmo: ammo - 1,
+      fireMissileTrigger: state.fireMissileTrigger + 1,
+    }));
+    return true;
+  },
+
+  replenishMissiles: () => {
+    set({ missileAmmo: 8 });
+  },
+
+  damageBuildingWithAmount: (buildingId, amount, hitPos, name, source = "missile") => {
+    const isKm = get().language === "km";
+    const config = BUILDING_REGISTRY[buildingId];
+    const maxHp = config ? config.maxHp : 350;
+    const category = config ? config.category : "concrete";
+    const debrisColor = config ? config.debrisColor : "#CBD5E1";
+    const buildingName = name || (isKm ? config?.nameKm : config?.nameEn) || "Building";
+
+    const current = get().damagedBuildings[buildingId];
+    const currentHp = current ? current.hp : maxHp;
+    const prevStage = current ? current.stage : "intact";
+
+    const newHp = Math.max(0, currentHp - amount);
+    const newStage = getBuildingDamageStage(newHp, maxHp);
+    const newHits = (current?.hits || 0) + 1;
+
+    const updatedBuilding: DamagedBuildingState = {
+      id: buildingId,
+      name: buildingName,
+      hits: newHits,
+      hp: newHp,
+      maxHp,
+      stage: newStage,
+      lastHitPos: hitPos,
+      category,
+      debrisColor,
+    };
+
+    const updated = {
+      ...get().damagedBuildings,
+      [buildingId]: updatedBuilding,
+    };
+
+    set({ damagedBuildings: updated });
+
+    if (newStage === "collapsed" && prevStage !== "collapsed") {
+      // Structural Collapse Event!
+      audio.playBuildingCollapse();
+      collisionWorld.setBuildingCollapsed(buildingId, true, config?.rubbleSize);
+      get().triggerCameraShake(1.0);
+
+      const collapseToast = isKm
+        ? `💥 បាក់រលំ! ${buildingName} បានបាក់រលំក្លាយជាគំនរបាក់បែក!`
+        : `🏢 STRUCTURAL COLLAPSE! ${buildingName} reduced to rubble!`;
+      get().addStatPop(collapseToast, "stress");
+    } else if (newStage === "heavy" && prevStage !== "heavy") {
+      audio.playExplosion();
+      get().triggerCameraShake(0.75);
+
+      const heavyToast = isKm
+        ? `🔥 ខូចខាតធ្ងន់ធ្ងរ! ${buildingName} កំពុងឆេះយ៉ាងសន្ធោសន្ធៅ! (${Math.round((newHp / maxHp) * 100)}% HP)`
+        : `🔥 CRITICAL DAMAGE! ${buildingName} heavily on fire! (${Math.round((newHp / maxHp) * 100)}% HP)`;
+      get().addStatPop(heavyToast, "stress");
+    } else {
+      if (source === "vehicle") {
+        audio.playCarCrash(Math.min(1.0, amount / 60));
+      } else if (source === "missile") {
+        audio.playExplosion();
+      }
+      get().triggerCameraShake(Math.min(0.8, 0.2 + amount / 120));
+
+      const hitToast = isKm
+        ? `💥 ប៉ះចំ ${buildingName}! (${Math.round((newHp / maxHp) * 100)}% HP នៅសល់)`
+        : `💥 IMPACT! ${buildingName} damaged! (${Math.round((newHp / maxHp) * 100)}% HP left)`;
+      get().addStatPop(hitToast, "stress");
+    }
+  },
+
+  damageBuilding: (buildingId, hitPos, name) => {
+    // Default missile damage ~160 HP
+    get().damageBuildingWithAmount(buildingId, 160, hitPos, name, "missile");
+  },
+
+  repairAllBuildings: () => {
+    const isKm = get().language === "km";
+    collisionWorld.resetAllBuildingColliders();
+    set({ damagedBuildings: {} });
+    audio.playClick();
+    get().addStatPop(
+      isKm
+        ? "🛠️ ការជួសជុលទីក្រុងបានបញ្ចប់! អគារទាំងអស់ត្រូវបានស្តារឡើងវិញ!"
+        : "🛠️ City Reconstruction Complete! All buildings repaired!",
+      "skill"
+    );
+  },
+
+  recoverVehicle: () => {
+    const state = get();
+    const current = state.targetPos;
+    const safeRoad = findNearestRoadPoint(current[0], current[2]);
+    const isKm = state.language === "km";
+
+    audio.playClick();
+    set({
+      targetPos: [safeRoad.x, safeRoad.y, safeRoad.z],
+      cameraFocus: [safeRoad.x, safeRoad.y, safeRoad.z],
+      playerHeading: safeRoad.heading,
+      vehicleSpeed: 0,
+      supercarPos: state.ridingVehicle === "supercar" ? [safeRoad.x, safeRoad.y, safeRoad.z] : state.supercarPos,
+      supercarHeading: state.ridingVehicle === "supercar" ? safeRoad.heading : state.supercarHeading,
+    });
+    get().triggerCameraShake(0.2);
+    get().addStatPop(
+      isKm ? "យានយន្តត្រូវបានសង្គ្រោះទៅលើផ្លូវវិញ! 🚗💨" : "Vehicle recovered to nearest road! 🚗💨",
+      "skill"
+    );
+  },
+
+  cameraShake: 0,
+  triggerCameraShake: (intensity = 0.5) => {
+    set((state) => ({ cameraShake: Math.min(1.0, state.cameraShake + intensity) }));
+  },
+
+  // Target Focus & Lock-on System State
+  lockedTarget: null,
+  targetingMode: false,
+
+  setLockedTarget: (target) => {
+    if (target) {
+      audio.playTargetLock();
+    } else {
+      audio.playTargetBeep();
+    }
+    set({ lockedTarget: target });
+  },
+
+  toggleTargetingMode: (active) => {
+    const nextVal = typeof active === "boolean" ? active : !get().targetingMode;
+    audio.playTargetBeep();
+    set({ targetingMode: nextVal });
+    const isKm = get().language === "km";
+    get().addStatPop(
+      nextVal
+        ? isKm ? "បើកប្រព័ន្ធចង្អុលគោលដៅ (ចុចលើអគារដើម្បីចាក់សោរ) 🎯" : "Target Focus Active (Click building to lock) 🎯"
+        : isKm ? "បិទប្រព័ន្ធចង្អុលគោលដៅ" : "Target Focus Deactivated",
+      "skill"
+    );
+  },
+
+  pointAndSetTarget: (pos, name, id) => {
+    const playerPos = get().targetPos;
+    const dist = Math.hypot(pos[0] - playerPos[0], pos[2] - playerPos[2]);
+    const targetName = name || (get().language === "km" ? "ទីតាំងគោលដៅ" : "Target Point");
+    const targetId = id || `tgt-${Date.now()}`;
+    const target: AttackTarget = {
+      id: targetId,
+      name: targetName,
+      position: [pos[0], pos[1] || 1.2, pos[2]],
+      distance: Math.round(dist),
+    };
+    audio.playTargetLock();
+    set({ lockedTarget: target });
+
+    // Turn character to face target if on foot
+    if (!get().ridingVehicle) {
+      const heading = Math.atan2(pos[0] - playerPos[0], pos[2] - playerPos[2]);
+      set({ playerHeading: heading });
+    }
+
+    const isKm = get().language === "km";
+    get().addStatPop(
+      isKm
+        ? `🎯 បានចាក់សោរគោលដៅ: ${targetName} (${Math.round(dist)}m)`
+        : `🎯 TARGET LOCKED: ${targetName} (${Math.round(dist)}m)`,
+      "skill"
+    );
+  },
+
+  cycleNextTarget: () => {
+    const current = get().lockedTarget;
+    let nextIdx = 0;
+    if (current) {
+      const currIdx = ATTACK_TARGET_LOCATIONS.findIndex((t) => t.id === current.id);
+      if (currIdx !== -1) {
+        nextIdx = (currIdx + 1) % ATTACK_TARGET_LOCATIONS.length;
+      }
+    }
+    const nextTargetDef = ATTACK_TARGET_LOCATIONS[nextIdx];
+    const isKm = get().language === "km";
+    get().pointAndSetTarget(
+      nextTargetDef.pos,
+      isKm ? nextTargetDef.nameKm : nextTargetDef.name,
+      nextTargetDef.id
+    );
+  },
+
+  clearLockedTarget: () => {
+    if (get().lockedTarget) {
+      audio.playTargetBeep();
+      set({ lockedTarget: null });
+      const isKm = get().language === "km";
+      get().addStatPop(isKm ? "បានដោះលែងគោលដៅ 🔓" : "Target Lock Released 🔓", "skill");
+    }
+  },
 
   mountVehicle: (v) => {
     const isKm = get().language === "km";
-    if (v === "supercar") {
+    if (v === "plane") {
+      audio.playCarIgnition();
+      get().addStatPop(isKm ? "បើកយន្តហោះចម្បាំង ✈️💨" : "Flying Steel Hawk Jet ✈️💨", "skill");
+    } else if (v === "supercar") {
       audio.playCarDoor(true);
       set({ enterVehicleAnimation: true });
       setTimeout(() => {
@@ -368,7 +761,16 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   dismountVehicle: () => {
     const state = get();
-    if (state.ridingVehicle === "supercar") {
+    if (state.ridingVehicle === "plane") {
+      audio.playClick();
+      set({
+        planePos: [state.targetPos[0], 0, state.targetPos[2]],
+        planeHeading: state.playerHeading,
+        planeAltitude: 0,
+        isAfterburnerActive: false,
+        targetPos: [state.targetPos[0], 0, state.targetPos[2]],
+      });
+    } else if (state.ridingVehicle === "supercar") {
       audio.playCarDoor(true);
       setTimeout(() => {
         audio.playCarDoor(false);
@@ -415,6 +817,13 @@ export const useGameStore = create<GameState>((set, get) => ({
       supercarPos,
       supercarHeading: heading !== undefined ? heading : state.supercarHeading,
     })),
+  setPlanePosition: (planePos, heading, altitude) =>
+    set((state) => ({
+      planePos,
+      planeHeading: heading !== undefined ? heading : state.planeHeading,
+      planeAltitude: altitude !== undefined ? altitude : state.planeAltitude,
+    })),
+  setAfterburnerActive: (isAfterburnerActive) => set({ isAfterburnerActive }),
   setEnterVehicleAnimation: (enterVehicleAnimation) => set({ enterVehicleAnimation }),
 
   playerHeading: 0,
@@ -428,6 +837,248 @@ export const useGameStore = create<GameState>((set, get) => ({
       cameraMode: state.cameraMode === "chase" ? "isometric" : "chase",
     }));
   },
+
+  // Shooter & Mobile Aiming State
+  currentWeaponId: "m416",
+  weaponAmmo: {
+    m416: { inMag: 30, reserve: 120 },
+    shotgun: { inMag: 5, reserve: 30 },
+    sniper: { inMag: 5, reserve: 20 },
+  },
+  isAiming: false,
+  isReloading: false,
+  crosshairSpread: 1.0,
+  cameraPitch: 0.25,
+  cameraYaw: 0,
+  cameraSensitivity: { ...DEFAULT_CAMERA_SENSITIVITY },
+  lastHitInfo: null,
+  practiceTargets: {
+    target_1: {
+      id: "target_1",
+      name: "Alpha Practice Target",
+      position: [-24, 0, 72],
+      health: 100,
+      maxHealth: 100,
+      destroyed: false,
+    },
+    target_2: {
+      id: "target_2",
+      name: "Bravo Practice Target",
+      position: [-16, 0, 75],
+      health: 100,
+      maxHealth: 100,
+      destroyed: false,
+    },
+    target_3: {
+      id: "target_3",
+      name: "Charlie Steel Silhouette",
+      position: [-32, 0, 74],
+      health: 100,
+      maxHealth: 100,
+      destroyed: false,
+    },
+  },
+
+  equipWeapon: (id) => {
+    audio.playClick();
+    set({ currentWeaponId: id, isReloading: false });
+    const isKm = get().language === "km";
+    if (id) {
+      const w = WEAPON_REGISTRY[id];
+      get().addStatPop(isKm ? `បំពាក់ ${w.name} 🔫` : `Equipped ${w.name} 🔫`, "skill");
+    } else {
+      get().addStatPop(isKm ? "ទុកអាវុធចូលថង់ 🎒" : "Holstered Weapon 🎒", "skill");
+    }
+  },
+
+  setAiming: (isAiming) => {
+    set({ isAiming });
+  },
+
+  startReload: () => {
+    const currentId = get().currentWeaponId;
+    if (!currentId || get().isReloading) return;
+    const ammo = get().weaponAmmo[currentId];
+    const def = WEAPON_REGISTRY[currentId];
+    if (ammo.inMag >= def.magCapacity || ammo.reserve <= 0) return;
+
+    audio.playReload();
+    set({ isReloading: true });
+
+    setTimeout(() => {
+      get().finishReload(currentId);
+    }, def.reloadDuration * 1000);
+  },
+
+  finishReload: (weaponId) => {
+    const ammo = get().weaponAmmo[weaponId];
+    const def = WEAPON_REGISTRY[weaponId];
+    if (!ammo || !def) {
+      set({ isReloading: false });
+      return;
+    }
+    const needed = def.magCapacity - ammo.inMag;
+    const toAdd = Math.min(needed, ammo.reserve);
+
+    set((state) => ({
+      isReloading: false,
+      weaponAmmo: {
+        ...state.weaponAmmo,
+        [weaponId]: {
+          inMag: ammo.inMag + toAdd,
+          reserve: ammo.reserve - toAdd,
+        },
+      },
+    }));
+  },
+
+  consumeAmmo: (weaponId, count = 1) => {
+    const ammo = get().weaponAmmo[weaponId];
+    if (!ammo || ammo.inMag < count) return false;
+    set((state) => ({
+      weaponAmmo: {
+        ...state.weaponAmmo,
+        [weaponId]: {
+          ...ammo,
+          inMag: ammo.inMag - count,
+        },
+      },
+    }));
+    return true;
+  },
+
+  damagePracticeTarget: (targetId, damage, hitPos, isHeadshot = false) => {
+    audio.playHitMarker(isHeadshot);
+    const targets = get().practiceTargets;
+    const tgt = targets[targetId];
+    if (!tgt || tgt.destroyed) return;
+
+    const newHealth = Math.max(0, tgt.health - damage);
+    const isDestroyed = newHealth <= 0;
+
+    if (isDestroyed) {
+      audio.playTargetDestroyed();
+    }
+
+    set((state) => ({
+      practiceTargets: {
+        ...state.practiceTargets,
+        [targetId]: {
+          ...tgt,
+          health: newHealth,
+          destroyed: isDestroyed,
+        },
+      },
+      lastHitInfo: {
+        hitPoint: hitPos,
+        damage,
+        isHeadshot,
+        targetId,
+        time: Date.now(),
+      },
+    }));
+
+    if (isDestroyed) {
+      setTimeout(() => {
+        set((state) => {
+          const current = state.practiceTargets[targetId];
+          if (!current) return state;
+          return {
+            practiceTargets: {
+              ...state.practiceTargets,
+              [targetId]: {
+                ...current,
+                health: current.maxHealth,
+                destroyed: false,
+              },
+            },
+          };
+        });
+      }, 4500);
+    }
+  },
+
+  resetPracticeTargets: () => {
+    set((state) => {
+      const resetMap: Record<string, PracticeTarget> = {};
+      Object.values(state.practiceTargets).forEach((t) => {
+        resetMap[t.id] = { ...t, health: t.maxHealth, destroyed: false };
+      });
+      return { practiceTargets: resetMap };
+    });
+  },
+
+  setCameraSensitivity: (sens) => {
+    set((state) => ({
+      cameraSensitivity: {
+        ...state.cameraSensitivity,
+        ...sens,
+      },
+    }));
+  },
+
+  setCameraAngles: (yaw, pitch) => {
+    set({ cameraYaw: yaw, cameraPitch: pitch });
+  },
+
+  deviceControlMode: "auto",
+  showTouchZoneGuide: false,
+  isPointerLocked: false,
+  setDeviceControlMode: (deviceControlMode) => set({ deviceControlMode }),
+  setShowTouchZoneGuide: (showTouchZoneGuide) => set({ showTouchZoneGuide }),
+  toggleTouchZoneGuide: () => set((s) => ({ showTouchZoneGuide: !s.showTouchZoneGuide })),
+  setIsPointerLocked: (isPointerLocked) => set({ isPointerLocked }),
+
+  pauseScreen: null,
+  setPauseScreen: (pauseScreen) => {
+    const prev = get().pauseScreen;
+    if (pauseScreen && !prev) {
+      audio.playOpen();
+      // Free the cursor so menus are clickable
+      if (typeof document !== "undefined" && document.pointerLockElement) document.exitPointerLock();
+    } else if (!pauseScreen && prev) {
+      audio.playClose();
+    }
+    set({ pauseScreen });
+  },
+  togglePause: () => {
+    const { pauseScreen, screen, setPauseScreen } = get();
+    if (screen !== "game_world") return;
+    setPauseScreen(pauseScreen ? null : "menu");
+  },
+
+  waypoint: null,
+  setWaypoint: (waypoint) => set({ waypoint }),
+
+  graphicsQuality: "medium",
+  shadowsEnabled: true,
+  lookSensitivityScale: 1,
+  setGraphicsQuality: (graphicsQuality) => {
+    set({ graphicsQuality });
+    persistSettings(get());
+  },
+  setShadowsEnabled: (shadowsEnabled) => {
+    set({ shadowsEnabled });
+    persistSettings(get());
+  },
+  setLookSensitivityScale: (lookSensitivityScale) => {
+    set({
+      lookSensitivityScale,
+      cameraSensitivity: scaledSensitivity(lookSensitivityScale),
+    });
+    persistSettings(get());
+  },
+  hydrateSettings: () => {
+    const saved = loadSettings();
+    if (!saved) return;
+    set({
+      graphicsQuality: saved.quality,
+      shadowsEnabled: saved.shadows,
+      lookSensitivityScale: saved.lookScale,
+      cameraSensitivity: scaledSensitivity(saved.lookScale),
+    });
+  },
+
 
   switchCharacter: (avatar) => {
     audio.playSuccess();
@@ -534,6 +1185,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       targetPos: coords,
       cameraFocus: coords,
     });
+  },
+
+  teleportTo: (x, z) => {
+    audio.playClick();
+    const pos: [number, number, number] = [x, 0, z];
+    set({ targetPos: pos, cameraFocus: pos, nearLocation: null });
   },
 
   addStatPop: (text, type) => {

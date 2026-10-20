@@ -37,3 +37,9 @@ next-env.d.ts
 /art-source/
 /archive/
 *.blend1
+
+# Local downloads and editor settings (runtime assets live in public/)
+/Assets/
+/SteelHawk_Asset.zip
+/freesound_community-jet-loop-01-32474.mp3
+*.code-workspace

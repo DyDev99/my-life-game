@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { FBXModel } from "@/game/assets/FBXModel";
 import { useGameStore } from "@/state/gameStore";
@@ -390,9 +390,17 @@ export function GroundEnvironment() {
   const setTargetPosition = useGameStore((state) => state.setTargetPosition);
   const activeModal = useGameStore((state) => state.activeModal);
 
-  const handleGroundClick = (e: { stopPropagation: () => void; point: THREE.Vector3 }) => {
+  const handleGroundClick = (e: ThreeEvent<MouseEvent>) => {
     if (activeModal) return;
     e.stopPropagation();
+    if (e.delta > 5) return;
+
+    const state = useGameStore.getState();
+    if (state.targetingMode || state.ridingVehicle === "plane" || e.shiftKey || e.altKey) {
+      state.pointAndSetTarget([e.point.x, 0.4, e.point.z], "Ground Coordinates");
+      return;
+    }
+
     setTargetPosition([e.point.x, 0, e.point.z]);
   };
 

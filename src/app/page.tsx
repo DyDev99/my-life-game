@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useGameStore } from "@/state/gameStore";
 import { MainMenu } from "@/ui/screens/MainMenu";
@@ -21,6 +21,11 @@ import { HomeModal } from "@/ui/modals/HomeModal";
 import { HotelModal } from "@/ui/modals/HotelModal";
 import { LockerRoomModal } from "@/ui/modals/LockerRoomModal";
 import { CharacterSwitcherModal } from "@/ui/modals/CharacterSwitcherModal";
+import { MobileShooterControls } from "@/ui/hud/MobileShooterControls";
+import { Minimap } from "@/ui/hud/Minimap";
+import { PauseMenu } from "@/ui/screens/PauseMenu";
+import { WorldMap } from "@/ui/screens/WorldMap";
+
 
 // Dynamically import Three.js canvas to ensure client-only rendering
 const GameCanvas = dynamic(
@@ -32,6 +37,11 @@ export default function GamePage() {
   const screen = useGameStore((state) => state.screen);
   const activeModal = useGameStore((state) => state.activeModal);
   const closeModal = useGameStore((state) => state.closeModal);
+
+  // Saved graphics / sensitivity settings (client-only)
+  useEffect(() => {
+    useGameStore.getState().hydrateSettings();
+  }, []);
 
   return (
     <main className="relative w-screen h-screen overflow-hidden bg-slate-950 font-sans select-none">
@@ -48,7 +58,9 @@ export default function GamePage() {
       {screen === "game_world" && (
         <>
           <HUD />
+          <MobileShooterControls />
           <FighterHud />
+
           <DecisionModal />
           <WorkModal />
           <PhoneModal />
@@ -66,6 +78,9 @@ export default function GamePage() {
             onClose={closeModal}
           />
           <StatFeedback />
+          <Minimap />
+          <WorldMap />
+          <PauseMenu />
         </>
       )}
     </main>
