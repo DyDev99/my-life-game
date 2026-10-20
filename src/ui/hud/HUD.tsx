@@ -8,6 +8,7 @@ import {
 } from "@/state/gameStore";
 import type { LocationKey } from "@/data/locations";
 import { translations } from "@/i18n/translations";
+import { useIsMobileMode } from "@/ui/hud/useIsMobileMode";
 import {
   Volume2,
   VolumeX,
@@ -31,6 +32,7 @@ import {
   Building2,
   BedDouble,
   Bell,
+  Menu,
 } from "lucide-react";
 
 export function HUD() {
@@ -92,6 +94,12 @@ export function HUD() {
   const isNearCoconut = !ridingVehicle && distToCoconut < 3.2;
 
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  // Phones get a GTA/PUBG-style HUD: minimap + vitals top-left (Minimap), money/time and
+  // the menu top-right, thumbs free for the joystick and combat buttons. Everything
+  // else (phone, family, journal, vehicles, settings) lives in the pause menu.
+  const isMobile = useIsMobileMode();
+  const setPauseScreen = useGameStore((state) => state.setPauseScreen);
+  const statCard = "bg-slate-900/80 backdrop-blur-md border border-white/15 p-2 rounded-xl shadow-lg flex flex-col gap-1";
 
   const t = translations[language];
   const timeStr = formatTimeHour(timeHour);
@@ -111,17 +119,41 @@ export function HUD() {
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3 sm:p-5 select-none overflow-hidden z-20">
       {/* Top Header Bar */}
-      <div className="flex flex-col gap-2.5 w-full max-w-xl mx-auto pointer-events-auto">
-        <div className="flex items-center justify-between gap-2 bg-slate-900/80 backdrop-blur-md border border-white/20 p-2.5 sm:px-4 rounded-2xl shadow-xl text-white">
+      {isMobile ? (
+        <div className="ml-auto flex items-start gap-2 pointer-events-auto">
+          <div className="flex flex-col items-end leading-tight [text-shadow:0_1px_3px_rgba(0,0,0,0.95)]">
+            <span className="text-xl font-black text-emerald-400">${stats.money}</span>
+            <span className="text-[11px] font-bold text-white whitespace-nowrap">
+              {t.day} {day} · {timeStr}
+            </span>
+          </div>
+          <button
+            onClick={isNight ? sleepAndEndDay : () => openModal("decision")}
+            aria-label={isNight ? "Sleep" : t.chooseDay}
+            className="grid place-items-center w-10 h-10 rounded-full bg-black/35 backdrop-blur-sm border border-white/30 text-amber-300 active:scale-90"
+          >
+            {isNight ? <Moon className="w-5 h-5 text-indigo-200" /> : <Sun className="w-5 h-5" />}
+          </button>
+          <button
+            onClick={() => setPauseScreen("menu")}
+            aria-label="Menu"
+            className="grid place-items-center w-10 h-10 rounded-full bg-black/35 backdrop-blur-sm border border-white/30 text-white active:scale-90"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        </div>
+      ) : (
+      <div className="flex flex-col w-full pointer-events-auto gap-2.5 max-w-xl mx-auto">
+        <div className="flex items-center justify-between gap-2 bg-slate-900/80 backdrop-blur-md border border-white/20 shadow-xl text-white p-2.5 sm:px-4 rounded-2xl">
           {/* Day & Time */}
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="flex items-center gap-1.5 bg-amber-500/20 border border-amber-400/40 px-2.5 py-1 rounded-xl text-amber-300 font-bold text-xs sm:text-sm">
+            <div className="flex items-center gap-1.5 bg-amber-500/20 border border-amber-400/40 px-2.5 py-1 rounded-xl text-amber-300 font-bold text-xs sm:text-sm whitespace-nowrap">
               {isNight ? <Moon className="w-3.5 h-3.5 text-indigo-300 animate-pulse" /> : <Sun className="w-3.5 h-3.5 text-amber-400" />}
               <span>
                 {t.day} {day}
               </span>
             </div>
-            <div className="text-xs sm:text-sm font-semibold tracking-wide text-slate-200">
+            <div className="text-xs sm:text-sm font-semibold tracking-wide text-slate-200 whitespace-nowrap">
               {timeStr}
             </div>
           </div>
@@ -176,7 +208,7 @@ export function HUD() {
         {/* Compact Stat Cards Grid */}
         <div className="grid grid-cols-4 gap-1.5 sm:gap-2.5">
           {/* Energy */}
-          <div className="bg-slate-900/80 backdrop-blur-md border border-white/15 p-2 rounded-xl shadow-lg flex flex-col gap-1">
+          <div className={statCard}>
             <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold text-slate-300">
               <span className="flex items-center gap-1 text-amber-400">⚡ {t.energy}</span>
               <span>{stats.energy}</span>
@@ -190,7 +222,7 @@ export function HUD() {
           </div>
 
           {/* Health */}
-          <div className="bg-slate-900/80 backdrop-blur-md border border-white/15 p-2 rounded-xl shadow-lg flex flex-col gap-1">
+          <div className={statCard}>
             <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold text-slate-300">
               <span className="flex items-center gap-1 text-rose-400">❤️ {t.health}</span>
               <span>{stats.health}</span>
@@ -204,7 +236,7 @@ export function HUD() {
           </div>
 
           {/* Happiness */}
-          <div className="bg-slate-900/80 backdrop-blur-md border border-white/15 p-2 rounded-xl shadow-lg flex flex-col gap-1">
+          <div className={statCard}>
             <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold text-slate-300">
               <span className="flex items-center gap-1 text-yellow-300">😊 {t.happiness}</span>
               <span>{stats.happiness}</span>
@@ -218,7 +250,7 @@ export function HUD() {
           </div>
 
           {/* Stress */}
-          <div className="bg-slate-900/80 backdrop-blur-md border border-white/15 p-2 rounded-xl shadow-lg flex flex-col gap-1">
+          <div className={statCard}>
             <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold text-slate-300">
               <span className="flex items-center gap-1 text-purple-400">😰 {t.stress}</span>
               <span>{stats.stress}</span>
@@ -232,9 +264,10 @@ export function HUD() {
           </div>
         </div>
       </div>
+      )}
 
       {/* CENTER FLOATING PROMPTS (NEAR VEHICLE OR NEAR BUILDING) */}
-      <div className="self-center flex flex-col items-center gap-2 pointer-events-auto">
+      <div className={`self-center flex flex-col items-center gap-2 pointer-events-auto ${isMobile ? "scale-90" : ""}`}>
         {/* Near Vehicle Prompt */}
         {!ridingVehicle && nearVehicle && (
           <motion.button
@@ -556,7 +589,7 @@ export function HUD() {
       )}
 
       {/* Bottom Main Action Bar */}
-      <div className="flex flex-col items-center gap-2 sm:gap-3 w-full max-w-md mx-auto pointer-events-auto pb-1 sm:pb-3">
+      <div className={`flex flex-col items-center w-full pointer-events-auto ${isMobile ? "gap-1.5 max-w-[19rem] mx-auto pb-0.5" : "gap-2 sm:gap-3 max-w-md mx-auto pb-1 sm:pb-3"}`}>
         {/* VEHICLE & FLIGHT DASHBOARD */}
         {ridingVehicle ? (
           <div className="w-full p-3 rounded-3xl bg-slate-900/90 backdrop-blur-md border border-amber-400/50 shadow-2xl flex flex-col gap-2">
@@ -667,8 +700,8 @@ export function HUD() {
               </div>
             </div>
 
-            {/* Driving / Flying Keys Tip */}
-            <div className="text-[10px] text-slate-300 text-center font-medium bg-black/30 py-1 rounded-lg">
+            {/* Driving / Flying Keys Tip (desktop) */}
+            <div className={`text-[10px] text-slate-300 text-center font-medium bg-black/30 py-1 rounded-lg ${isMobile ? "hidden" : ""}`}>
               {ridingVehicle === "plane" ? (
                 <>
                   <kbd className="px-1 rounded bg-white/10 text-white">Tab</kbd> Target •{" "}
@@ -697,7 +730,7 @@ export function HUD() {
               )}
             </div>
           </div>
-        ) : (
+        ) : isMobile ? null : (
           <>
             {/* Quick Vehicle Ride Bar (Always Accessible) */}
             <div className="flex items-center gap-1.5 w-full justify-center">
@@ -806,7 +839,8 @@ export function HUD() {
           </>
         )}
 
-        {/* Secondary Utility Dock: Phone, Family, Journal, Map */}
+        {/* Secondary Utility Dock: Phone, Family, Journal, Map (desktop; phones use the action row) */}
+        {!isMobile && (
         <div className="flex items-center justify-around w-full bg-slate-900/85 backdrop-blur-md border border-white/20 p-2 rounded-2xl shadow-xl">
           {/* Phone App */}
           <button
@@ -856,6 +890,7 @@ export function HUD() {
             <span className="text-[10px] font-bold">Map</span>
           </button>
         </div>
+        )}
       </div>
     </div>
   );

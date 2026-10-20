@@ -25,6 +25,7 @@ import { MobileShooterControls } from "@/ui/hud/MobileShooterControls";
 import { Minimap } from "@/ui/hud/Minimap";
 import { PauseMenu } from "@/ui/screens/PauseMenu";
 import { WorldMap } from "@/ui/screens/WorldMap";
+import { RotateDeviceGate } from "@/ui/screens/RotateDeviceGate";
 
 
 // Dynamically import Three.js canvas to ensure client-only rendering
@@ -44,7 +45,8 @@ export default function GamePage() {
   }, []);
 
   return (
-    <main className="relative w-screen h-screen overflow-hidden bg-slate-950 font-sans select-none">
+    // h-dvh: the visible height, so mobile browser toolbars never cover the bottom controls
+    <main className="relative w-full h-dvh overflow-hidden bg-slate-950 font-sans select-none">
       {/* 3D Cambodian Miniature World (Runs continuously in background) */}
       <GameCanvas />
 
@@ -57,8 +59,16 @@ export default function GamePage() {
       {/* Main In-Game World HUD & Interactive Modals */}
       {screen === "game_world" && (
         <>
-          <HUD />
-          <MobileShooterControls />
+          {/* Keep HUD and touch controls clear of the notch / home indicator */}
+          <div
+            className="absolute pointer-events-none"
+            style={{
+              inset: "env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)",
+            }}
+          >
+            <HUD />
+            <MobileShooterControls />
+          </div>
           <FighterHud />
 
           <DecisionModal />
@@ -81,6 +91,7 @@ export default function GamePage() {
           <Minimap />
           <WorldMap />
           <PauseMenu />
+          <RotateDeviceGate />
         </>
       )}
     </main>

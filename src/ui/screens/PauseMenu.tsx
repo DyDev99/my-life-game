@@ -1,9 +1,29 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { ArrowLeft, Home, Languages, Map as MapIcon, Play, Settings, Volume2, VolumeX } from "lucide-react";
+import {
+  ArrowLeft,
+  BookOpen,
+  Camera,
+  HelpCircle,
+  Home,
+  Languages,
+  Map as MapIcon,
+  Monitor,
+  Moon,
+  Play,
+  Settings,
+  Smartphone,
+  Sun,
+  User,
+  Users,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import { useGameStore } from "@/state/gameStore";
 import type { GraphicsQuality } from "@/state/settingsStorage";
+import { translations } from "@/i18n/translations";
+import { useIsMobileMode } from "@/ui/hud/useIsMobileMode";
 
 /**
  * Esc pauses / steps back, M toggles the world map. Modals keep priority:
@@ -58,9 +78,41 @@ export function PauseMenu() {
   const setGraphicsQuality = useGameStore((s) => s.setGraphicsQuality);
   const setShadowsEnabled = useGameStore((s) => s.setShadowsEnabled);
   const setLookSensitivityScale = useGameStore((s) => s.setLookSensitivityScale);
+  const timeHour = useGameStore((s) => s.timeHour);
+  const ridingVehicle = useGameStore((s) => s.ridingVehicle);
+  const isMobile = useIsMobileMode();
 
   if (pauseScreen !== "menu" && pauseScreen !== "settings") return null;
   const km = language === "km";
+  const t = translations[language];
+
+  // Phone HUD keeps the screen clear, so these live here instead (each closes the menu first)
+  const quick = (fn: () => void) => () => {
+    setPauseScreen(null);
+    fn();
+  };
+  const st = useGameStore.getState;
+  const isNight = timeHour >= 21.0;
+  const tile =
+    "flex flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-slate-800/70 py-2 text-[11px] font-bold hover:bg-slate-700/80 active:scale-95";
+  const quickActions = [
+    {
+      icon: isNight ? <Moon className="w-5 h-5 text-indigo-300" /> : <Sun className="w-5 h-5 text-amber-300" />,
+      label: isNight ? (km ? "ចូលគេង" : "Sleep") : t.chooseDay,
+      on: quick(() => (isNight ? st().sleepAndEndDay() : st().openModal("decision"))),
+    },
+    { icon: <Smartphone className="w-5 h-5 text-sky-300" />, label: t.phone, on: quick(() => st().openModal("phone")) },
+    { icon: <Users className="w-5 h-5 text-rose-300" />, label: t.appFamily, on: quick(() => st().openModal("relationship")) },
+    { icon: <BookOpen className="w-5 h-5 text-amber-300" />, label: t.appJournal, on: quick(() => st().openModal("journal")) },
+    { icon: <User className="w-5 h-5 text-amber-300" />, label: km ? "តួអង្គ" : "Character", on: quick(() => st().openModal("character_select")) },
+    { icon: <Camera className="w-5 h-5 text-slate-200" />, label: km ? "មុំកាមេរ៉ា" : "Camera view", on: quick(() => st().toggleCameraMode()) },
+  ];
+  const vehicles = [
+    ["plane", "✈️", km ? "យន្តហោះ" : "Jet"],
+    ["supercar", "🏎️", "Supercar"],
+    ["motorbike", "🏍️", km ? "ម៉ូតូ" : "Motorbike"],
+    ["bicycle", "🚲", km ? "កង់" : "Bicycle"],
+  ] as const;
 
   const buttonBase = "flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left font-bold transition-colors";
   const menuButton = `${buttonBase} border-white/10 bg-slate-800/70 hover:bg-slate-700/80 hover:border-white/25`;
@@ -72,8 +124,73 @@ export function PauseMenu() {
       className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/75 backdrop-blur-sm p-4 text-white pointer-events-auto"
       onClick={(e) => e.target === e.currentTarget && setPauseScreen(null)}
     >
-      <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-slate-900/95 p-5 shadow-2xl">
-        {pauseScreen === "menu" ? (
+      <div
+        className={`w-full max-h-[92dvh] overflow-y-auto rounded-2xl border border-white/15 bg-slate-900/95 shadow-2xl ${
+          isMobile && pauseScreen === "menu" ? "max-w-2xl p-4" : "max-w-sm p-5"
+        }`}
+      >
+        {pauseScreen === "menu" && isMobile ? (
+          <div className="grid grid-cols-[1fr_1.35fr] gap-4">
+            <div className="flex flex-col gap-2">
+              <h1 className={`text-2xl font-black ${tracking}`}>{km ? "ម៉ឺនុយ" : "MENU"}</h1>
+              <p className="-mt-1 mb-1 text-xs text-slate-400">
+                {playerName} · {km ? `ថ្ងៃទី ${day}` : `Day ${day}`}
+              </p>
+              <button className={`${buttonBase} py-2.5 bg-amber-500/90 border-amber-300 text-slate-950`} onClick={() => setPauseScreen(null)}>
+                <Play className="w-4 h-4" />
+                {km ? "បន្តលេង" : "Resume"}
+              </button>
+              <button className={`${menuButton} py-2.5`} onClick={() => setPauseScreen("map")}>
+                <MapIcon className="w-4 h-4" />
+                {km ? "ផែនទី" : "Map"}
+              </button>
+              <button className={`${menuButton} py-2.5`} onClick={() => setPauseScreen("settings")}>
+                <Settings className="w-4 h-4" />
+                {km ? "ការកំណត់" : "Settings"}
+              </button>
+              <button className={`${menuButton} py-2.5`} onClick={() => setScreen("main_menu")}>
+                <Home className="w-4 h-4" />
+                {km ? "ម៉ឺនុយដើម" : "Main Menu"}
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-3 gap-1.5">
+                {quickActions.map((a) => (
+                  <button key={a.label} className={tile} onClick={a.on}>
+                    {a.icon}
+                    <span className="truncate max-w-full px-1">{a.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {!ridingVehicle && (
+                <div>
+                  <p className="mb-1.5 text-[11px] font-bold text-slate-400">{km ? "យានយន្ត" : "VEHICLES"}</p>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {vehicles.map(([v, icon, label]) => (
+                      <button key={v} className={tile} onClick={quick(() => st().mountVehicle(v))}>
+                        <span className="text-lg leading-none">{icon}</span>
+                        <span className="truncate max-w-full px-1">{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-1.5">
+                <button className={tile} onClick={quick(() => st().setShowTouchZoneGuide(true))}>
+                  <HelpCircle className="w-5 h-5 text-amber-300" />
+                  {km ? "របៀបលេង" : "Controls guide"}
+                </button>
+                <button className={tile} onClick={quick(() => st().setDeviceControlMode("computer"))}>
+                  <Monitor className="w-5 h-5 text-sky-300" />
+                  {km ? "ប្ដូរទៅ PC" : "PC controls"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : pauseScreen === "menu" ? (
           <>
             <p className={`text-[11px] font-bold text-amber-300 ${km ? "" : "tracking-[0.25em]"}`}>{km ? "ជីវិតខ្ញុំ" : "MY LIFE"}</p>
             <h1 className={`mt-1 text-3xl font-black ${tracking}`}>{km ? "ផ្អាក" : "PAUSED"}</h1>

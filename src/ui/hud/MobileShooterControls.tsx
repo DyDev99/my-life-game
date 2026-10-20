@@ -42,6 +42,10 @@ import {
  *    - Interactive "Touch Zones Guide" overlay explaining finger positions.
  *    - Dynamic Virtual Joystick & High-Precision Touch Aiming.
  */
+// Round, translucent thumb buttons (PUBG / GTA mobile style)
+const TOUCH_BTN =
+  "absolute pointer-events-auto touch-none grid place-items-center rounded-full bg-black/35 backdrop-blur-sm border border-white/30 text-white shadow-lg active:scale-90 active:bg-white/25";
+
 export function MobileShooterControls() {
   const currentWeaponId = useGameStore((state) => state.currentWeaponId);
   const weaponAmmo = useGameStore((state) => state.weaponAmmo);
@@ -371,7 +375,7 @@ export function MobileShooterControls() {
       {/* ===================================================================== */}
       {/* 0. TOP CONTROLLER MODE SWITCHER & TOUCH ZONE GUIDE BUTTON */}
       {/* ===================================================================== */}
-      <div className="absolute top-3 right-3 sm:top-5 sm:right-5 flex items-center gap-2 pointer-events-auto z-40">
+      <div className={`absolute top-3 right-3 sm:top-5 sm:right-5 items-center gap-2 pointer-events-auto z-40 ${isMobileMode ? "hidden" : "flex"}`}>
         {/* Device Mode Switcher (PC Controller vs Mobile Touch) */}
         <button
           onClick={() => {
@@ -383,7 +387,8 @@ export function MobileShooterControls() {
           {isMobileMode ? (
             <>
               <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-emerald-300">📱 Mobile Mode</span>
+              {/* Icon-only on phones to keep the top edge clear */}
+              <span className="text-emerald-300 hidden">📱 Mobile Mode</span>
             </>
           ) : (
             <>
@@ -405,8 +410,7 @@ export function MobileShooterControls() {
             title="Show / Hide Mobile Touch Control Areas Guide"
           >
             <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">Control Zones</span>
-            <span>Guide</span>
+            {!isMobileMode && <span>Control Zones Guide</span>}
           </button>
         )}
 
@@ -442,8 +446,9 @@ export function MobileShooterControls() {
 
       {/* ===================================================================== */}
       {/* 2. MOBILE DEMARCATED TOUCH CONTROL ZONES (Shows where to touch) */}
+      {/* Only while the Guide is on, so they don't cover the game */}
       {/* ===================================================================== */}
-      {isMobileMode && (
+      {isMobileMode && showTouchZoneGuide && (
         <>
           {/* A. MOVEMENT ZONE (Bottom-Left Quadrant) */}
           <div
@@ -630,7 +635,7 @@ export function MobileShooterControls() {
       {/* ===================================================================== */}
       {isMobileMode && (
         <div
-          className="absolute bottom-8 left-8 w-44 h-44 pointer-events-auto touch-none flex items-center justify-center"
+          className="absolute bottom-3 left-3 w-40 h-40 pointer-events-auto touch-none flex items-center justify-center"
           data-touch-control="joystick"
           onTouchStart={handleJoystickStart}
           onTouchMove={handleJoystickMove}
@@ -639,146 +644,91 @@ export function MobileShooterControls() {
         >
           {/* Outer Ring */}
           <div
-            className={`w-32 h-32 rounded-full border-2 flex items-center justify-center transition-all ${
-              joystickActive
-                ? "border-emerald-400/80 bg-emerald-950/50 shadow-[0_0_24px_rgba(16,185,129,0.45)]"
-                : "border-white/20 bg-black/40 backdrop-blur-sm"
+            className={`w-28 h-28 rounded-full border flex items-center justify-center transition-all ${
+              joystickActive ? "border-white/50 bg-white/10" : "border-white/25 bg-black/15"
             }`}
           >
             {/* Inner Joystick Knob */}
             <div
-              className={`w-14 h-14 rounded-full border-2 flex items-center justify-center shadow-lg transition-transform ${
-                joystickActive
-                  ? "border-emerald-300 bg-gradient-to-tr from-emerald-600 to-teal-400 scale-105"
-                  : "border-white/40 bg-slate-800/80"
+              className={`w-12 h-12 rounded-full border flex items-center justify-center shadow-lg transition-transform ${
+                joystickActive ? "border-white/80 bg-white/45" : "border-white/40 bg-white/20"
               }`}
               style={{
                 transform: `translate(${knobPos.x}px, ${knobPos.y}px)`,
               }}
             >
-              <div className="w-3.5 h-3.5 rounded-full bg-white/80" />
             </div>
           </div>
         </div>
       )}
 
       {/* ===================================================================== */}
-      {/* 5. MOBILE SECONDARY LEFT FIRE BUTTON */}
-      {/* ===================================================================== */}
-      {isMobileMode && currentWeaponId && !ridingVehicle && (
-        <button
-          data-touch-control="left-fire"
-          className="absolute left-8 bottom-56 pointer-events-auto touch-none w-14 h-14 rounded-full bg-gradient-to-tr from-red-600 via-rose-600 to-amber-500 border-2 border-amber-300/80 active:scale-95 shadow-[0_0_20px_rgba(239,68,68,0.6)] flex flex-col items-center justify-center cursor-pointer text-white"
-          onPointerDown={() => {
-            mobileInput.isFiring = true;
-            mobileInput.shootOnce = true;
-          }}
-          onPointerUp={() => {
-            mobileInput.isFiring = false;
-          }}
-          title="Secondary Fire (Left Thumb: Shoot while looking)"
-        >
-          <span className="text-xl">🔥</span>
-          <span className="text-[8px] font-mono font-black text-amber-200">SHOOT</span>
-        </button>
-      )}
-
-      {/* ===================================================================== */}
       {/* 6. MOBILE COMBAT ACTION BUTTONS (Only rendered on Mobile Mode) */}
       {/* ===================================================================== */}
       {isMobileMode && !ridingVehicle && (
-        <div className="absolute bottom-6 right-6 flex items-end gap-3 pointer-events-auto">
-          {/* Jump & Crouch Column */}
-          <div className="flex flex-col gap-2.5 items-center mb-1">
-            {/* Jump Button */}
-            <button
-              data-touch-control="jump"
-              onClick={() => {
-                mobileInput.triggerJump();
-                useGameStore.getState().performCombatMove("jump");
-              }}
-              className="w-13 h-13 rounded-2xl bg-black/45 backdrop-blur-md border border-white/25 active:bg-white/20 active:scale-95 text-white flex flex-col items-center justify-center cursor-pointer shadow-lg"
-              title="Jump"
-            >
-              <ChevronsUp className="w-5 h-5 text-amber-400" />
-              <span className="text-[9px] font-mono font-bold text-slate-300">JUMP</span>
-            </button>
-
-            {/* Crouch Button */}
-            <button
-              data-touch-control="crouch"
-              onClick={() => {
-                mobileInput.toggleCrouch();
-                useGameStore.getState().toggleCrouch();
-              }}
-              className={`w-13 h-13 rounded-2xl backdrop-blur-md border active:scale-95 text-white flex flex-col items-center justify-center cursor-pointer shadow-lg transition-all ${
-                mobileInput.isCrouching
-                  ? "bg-amber-500/40 border-amber-400 shadow-amber-500/30"
-                  : "bg-black/45 border-white/25"
-              }`}
-              title="Crouch"
-            >
-              <Shield className="w-4 h-4 text-slate-200" />
-              <span className="text-[9px] font-mono font-bold text-slate-300">CROUCH</span>
-            </button>
-          </div>
-
-          {/* Aim Down Sights (ADS / Scope) Button */}
+        // PUBG-style thumb cluster: big fire button, small icon buttons in an arc around it
+        <div className="absolute bottom-3 right-3 w-[13rem] h-[11.5rem] pointer-events-none">
+          <button
+            data-touch-control="jump"
+            aria-label="Jump"
+            onClick={() => {
+              mobileInput.triggerJump();
+              useGameStore.getState().performCombatMove("jump");
+            }}
+            className={`${TOUCH_BTN} w-12 h-12 right-6 bottom-[6.5rem]`}
+          >
+            <ChevronsUp className="w-5 h-5" />
+          </button>
+          <button
+            data-touch-control="crouch"
+            aria-label="Crouch"
+            onClick={() => {
+              mobileInput.toggleCrouch();
+              useGameStore.getState().toggleCrouch();
+            }}
+            className={`${TOUCH_BTN} w-12 h-12 right-[9.5rem] bottom-2 ${mobileInput.isCrouching ? "!bg-amber-500/50 !border-amber-300" : ""}`}
+          >
+            <Shield className="w-5 h-5" />
+          </button>
           {currentWeaponId && (
-            <button
-              data-touch-control="ads"
-              onClick={() => setAiming(!isAiming)}
-              className={`w-15 h-15 rounded-3xl backdrop-blur-md border-2 flex flex-col items-center justify-center cursor-pointer active:scale-95 shadow-xl transition-all ${
-                isAiming
-                  ? "bg-emerald-500/40 border-emerald-400 text-emerald-200 shadow-[0_0_20px_rgba(16,185,129,0.5)]"
-                  : "bg-black/50 border-white/30 text-white hover:bg-white/10"
-              }`}
-              title="Scope / Aim Down Sights"
-            >
-              <Eye className="w-6 h-6" />
-              <span className="text-[10px] font-mono font-black mt-0.5">
-                {isAiming ? "ADS ON" : "AIM"}
-              </span>
-            </button>
-          )}
-
-          {/* Reload Button */}
-          {currentWeaponId && currentAmmo && (
-            <button
-              data-touch-control="reload"
-              onClick={startReload}
-              disabled={isReloading || currentAmmo.inMag >= (currentDef?.magCapacity || 30)}
-              className={`w-14 h-14 rounded-2xl backdrop-blur-md border border-white/25 flex flex-col items-center justify-center cursor-pointer active:scale-95 shadow-lg transition-all ${
-                isReloading
-                  ? "bg-amber-600/30 border-amber-400 text-amber-300"
-                  : "bg-black/45 text-white hover:bg-white/10"
-              }`}
-              title="Reload"
-            >
-              <RotateCw className={`w-5 h-5 ${isReloading ? "animate-spin text-amber-400" : ""}`} />
-              <span className="text-[9px] font-mono font-bold mt-0.5">RELOAD</span>
-            </button>
-          )}
-
-          {/* PRIMARY FIRE BUTTON (Large PUBG Mobile Thumb Trigger) */}
-          {currentWeaponId && (
-            <button
-              data-touch-control="primary-fire"
-              className="w-20 h-20 rounded-full bg-gradient-to-tr from-rose-600 via-red-600 to-amber-500 active:scale-95 border-3 border-amber-300 shadow-[0_0_28px_rgba(244,63,94,0.6)] flex flex-col items-center justify-center cursor-pointer text-white select-none touch-none"
-              onPointerDown={() => {
-                mobileInput.isFiring = true;
-                mobileInput.shootOnce = true;
-              }}
-              onPointerUp={() => {
-                mobileInput.isFiring = false;
-              }}
-              title="Primary Fire (Hold to Spray)"
-            >
-              <Crosshair className="w-8 h-8 text-white drop-shadow-md" />
-              <span className="text-[10px] font-mono font-black tracking-wider text-amber-200">
-                FIRE
-              </span>
-            </button>
+            <>
+              <button
+                data-touch-control="ads"
+                aria-label="Aim"
+                onClick={() => setAiming(!isAiming)}
+                className={`${TOUCH_BTN} w-12 h-12 right-[5.75rem] bottom-2 ${isAiming ? "!bg-emerald-500/50 !border-emerald-300" : ""}`}
+              >
+                <Eye className="w-5 h-5" />
+              </button>
+              {currentAmmo && (
+                <button
+                  data-touch-control="reload"
+                  aria-label="Reload"
+                  onClick={startReload}
+                  disabled={isReloading || currentAmmo.inMag >= (currentDef?.magCapacity || 30)}
+                  className={`${TOUCH_BTN} w-11 h-11 right-[5.25rem] bottom-[4.5rem] disabled:opacity-50`}
+                >
+                  <RotateCw className={`w-4 h-4 ${isReloading ? "animate-spin text-amber-300" : ""}`} />
+                </button>
+              )}
+              <button
+                data-touch-control="primary-fire"
+                aria-label="Fire"
+                className="absolute right-1 bottom-1 w-[4.75rem] h-[4.75rem] rounded-full pointer-events-auto touch-none grid place-items-center bg-red-600/55 backdrop-blur-sm border-2 border-white/50 active:scale-90 active:bg-red-500/80 text-white shadow-lg"
+                onPointerDown={() => {
+                  mobileInput.isFiring = true;
+                  mobileInput.shootOnce = true;
+                }}
+                onPointerUp={() => {
+                  mobileInput.isFiring = false;
+                }}
+                onPointerCancel={() => {
+                  mobileInput.isFiring = false;
+                }}
+              >
+                <Crosshair className="w-8 h-8" />
+              </button>
+            </>
           )}
         </div>
       )}
@@ -882,13 +832,35 @@ export function MobileShooterControls() {
       {/* ===================================================================== */}
       {/* 8. WEAPON SELECTOR DOCK & AMMO STATUS (Bottom Center) */}
       {/* ===================================================================== */}
-      <div
-        className={`absolute flex items-center gap-1.5 p-1.5 rounded-2xl bg-black/60 backdrop-blur-md border border-white/20 shadow-2xl pointer-events-auto transition-all ${
-          isMobileMode
-            ? "bottom-6 left-1/2 -translate-x-1/2"
-            : "bottom-18 left-1/2 -translate-x-1/2"
-        }`}
-      >
+      {isMobileMode && !ridingVehicle && (
+        <button
+          data-touch-control="weapon-cycle"
+          onClick={() => {
+            const order: Array<WeaponId | null> = [null, "m416", "shotgun", "sniper"];
+            equipWeapon(order[(order.indexOf(currentWeaponId) + 1) % order.length]);
+          }}
+          className="absolute right-3 bottom-[12.25rem] pointer-events-auto flex items-center gap-2 rounded-full bg-black/40 backdrop-blur-sm border border-white/25 px-3 py-1.5 text-white shadow-lg active:scale-95"
+          aria-label="Switch weapon"
+        >
+          {currentDef && currentAmmo ? (
+            <>
+              <span className="text-[11px] font-black" style={{ color: currentDef.color }}>
+                {currentDef.category}
+              </span>
+              <span className="text-xs font-bold">{currentDef.name.split(" ")[0]}</span>
+              <span className="font-mono text-xs font-black">
+                {currentAmmo.inMag}
+                <span className="text-white/50">/{currentAmmo.reserve}</span>
+              </span>
+            </>
+          ) : (
+            <span className="text-xs font-bold">🎒 {useGameStore.getState().language === "km" ? "ដៃទទេ" : "Unarmed"}</span>
+          )}
+          <RotateCw className="w-3 h-3 text-white/60" />
+        </button>
+      )}
+      {!isMobileMode && (
+      <div className="absolute flex items-center gap-1.5 p-1.5 rounded-2xl bg-black/60 backdrop-blur-md border border-white/20 shadow-2xl pointer-events-auto transition-all bottom-18 left-1/2 -translate-x-1/2">
         {(["m416", "shotgun", "sniper"] as WeaponId[]).map((wId, idx) => {
           const w = WEAPON_REGISTRY[wId];
           const ammo = weaponAmmo[wId];
@@ -953,6 +925,7 @@ export function MobileShooterControls() {
           <Sliders className="w-3.5 h-3.5" />
         </button>
       </div>
+      )}
 
       {/* ===================================================================== */}
       {/* 9. INTERACTIVE TOUCH ZONES GUIDE OVERLAY (Full Guide on Mobile) */}

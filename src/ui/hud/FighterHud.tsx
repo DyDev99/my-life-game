@@ -4,6 +4,7 @@ import React from "react";
 import { useGameStore } from "@/state/gameStore";
 import { CHARACTERS, type CharacterId } from "@/data/characters";
 import { PUNCHES_PER_TRAINING_REWARD } from "@/state/rules/combat";
+import { useIsMobileMode } from "@/ui/hud/useIsMobileMode";
 
 // Move list + live combat state for fighter characters (CharacterDefinition.canFight).
 export function FighterHud() {
@@ -16,8 +17,10 @@ export function FighterHud() {
   const airborne = useGameStore((s) => s.combat.airborne);
   const combo = useGameStore((s) => s.combat.combo);
   const punchesThrown = useGameStore((s) => s.combat.punchesThrown);
+  const isMobile = useIsMobileMode();
 
-  if (!CHARACTERS[avatar as CharacterId]?.canFight || ridingVehicle) return null;
+  // The move list shows keyboard keys, so it's hidden with touch controls
+  if (!CHARACTERS[avatar as CharacterId]?.canFight || ridingVehicle || isMobile) return null;
 
   const km = language === "km";
   const stance = airborne

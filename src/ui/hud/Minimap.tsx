@@ -28,11 +28,13 @@ export function Minimap() {
   const language = useGameStore((s) => s.language);
   const waypoint = useGameStore((s) => s.waypoint);
   const setPauseScreen = useGameStore((s) => s.setPauseScreen);
+  const health = useGameStore((s) => s.stats.health);
+  const energy = useGameStore((s) => s.stats.energy);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const radiusRef = useRef(55);
   const [caption, setCaption] = useState({ district: "", distance: -1 });
 
-  const size = isMobile ? 116 : 184;
+  const size = isMobile ? 108 : 184;
   const km = language === "km";
 
   useEffect(() => {
@@ -93,9 +95,12 @@ export function Minimap() {
     <div
       // data-touch-control keeps clicks here from firing the equipped weapon
       data-touch-control
-      className={`fixed z-40 flex flex-col items-center gap-1.5 select-none ${
-        isMobile ? "top-16 right-3" : "bottom-4 left-4"
-      }`}
+      className="fixed z-40 flex flex-col items-center gap-1.5 select-none"
+      style={
+        isMobile
+          ? { top: "calc(env(safe-area-inset-top) + 0.75rem)", left: "calc(env(safe-area-inset-left) + 0.75rem)" }
+          : { bottom: "calc(env(safe-area-inset-bottom) + 1rem)", left: "calc(env(safe-area-inset-left) + 1rem)" }
+      }
     >
       <div className="relative" style={{ width: size, height: size }}>
         <canvas
@@ -110,6 +115,23 @@ export function Minimap() {
         </span>
       </div>
 
+      {isMobile ? (
+        // GTA-style vitals under the minimap
+        <div className="flex flex-col gap-1 pointer-events-none" style={{ width: size }}>
+          {[
+            [health, "bg-emerald-400"],
+            [energy, "bg-sky-400"],
+          ].map(([v, color], i) => (
+            <div key={i} className="h-1.5 w-full rounded-full bg-black/50 overflow-hidden">
+              <div className={`h-full ${color}`} style={{ width: `${Math.max(0, Math.min(100, Number(v)))}%` }} />
+            </div>
+          ))}
+          <span className="truncate text-center text-[10px] font-bold text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.95)]">
+            {caption.district}
+            {waypoint && caption.distance >= 0 && <span className="text-fuchsia-300"> · {caption.distance} m</span>}
+          </span>
+        </div>
+      ) : (
       <div className="flex items-center gap-1.5 pointer-events-auto">
         <span className="max-w-[9rem] truncate rounded-md bg-slate-950/75 border border-white/15 px-2 py-0.5 text-[11px] font-semibold text-slate-100">
           {caption.district}
@@ -123,7 +145,7 @@ export function Minimap() {
           aria-label={km ? "ផែនទី" : "World map"}
         >
           <MapIcon className="w-3 h-3" />
-          {!isMobile && <kbd className="font-mono text-[10px] text-slate-400">M</kbd>}
+          <kbd className="font-mono text-[10px] text-slate-400">M</kbd>
         </button>
         <button
           onClick={() => setPauseScreen("menu")}
@@ -131,9 +153,10 @@ export function Minimap() {
           aria-label={km ? "ផ្អាក" : "Pause"}
         >
           <Pause className="w-3 h-3" />
-          {!isMobile && <kbd className="font-mono text-[10px] text-slate-400">Esc</kbd>}
+          <kbd className="font-mono text-[10px] text-slate-400">Esc</kbd>
         </button>
       </div>
+      )}
     </div>
   );
 }

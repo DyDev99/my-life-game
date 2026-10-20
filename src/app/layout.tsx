@@ -21,6 +21,8 @@ export const metadata: Metadata = {
   description:
     "A cozy modern Cambodian life simulation game where you live, work, and build relationships in Kampong Cham, Cambodia.",
   keywords: ["Cambodia", "Life Simulation", "Khmer Game", "ជីវិតខ្ញុំ", "My Life", "Kampong Cham"],
+  // iOS home-screen launch without Safari's toolbars
+  appleWebApp: { capable: true, title: "My Life", statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {

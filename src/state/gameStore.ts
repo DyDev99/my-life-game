@@ -1070,7 +1070,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   hydrateSettings: () => {
     const saved = loadSettings();
-    if (!saved) return;
+    if (!saved) {
+      // First run on a phone/tablet: start without shadows (the most expensive pass)
+      if (typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches) set({ shadowsEnabled: false });
+      return;
+    }
     set({
       graphicsQuality: saved.quality,
       shadowsEnabled: saved.shadows,
