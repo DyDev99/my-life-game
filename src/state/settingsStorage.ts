@@ -7,6 +7,10 @@ export interface SavedSettings {
   quality: GraphicsQuality;
   shadows: boolean;
   lookScale: number;
+  flightSensitivity?: number;
+  invertFlightPitch?: boolean;
+  flightAssist?: boolean;
+  mouseFlightEnabled?: boolean;
 }
 
 const KEY = "mylife.settings.v1";
@@ -19,7 +23,20 @@ export function loadSettings(): SavedSettings | null {
     const v = JSON.parse(raw) as Partial<SavedSettings>;
     const quality: GraphicsQuality = v.quality === "low" || v.quality === "high" ? v.quality : "medium";
     const lookScale = typeof v.lookScale === "number" ? Math.min(2, Math.max(0.2, v.lookScale)) : 1;
-    return { quality, shadows: v.shadows !== false, lookScale };
+    const flightSensitivity = typeof v.flightSensitivity === "number" ? Math.min(2.5, Math.max(0.4, v.flightSensitivity)) : 1.0;
+    const invertFlightPitch = Boolean(v.invertFlightPitch);
+    const flightAssist = v.flightAssist !== false; // default true
+    const mouseFlightEnabled = Boolean(v.mouseFlightEnabled);
+
+    return {
+      quality,
+      shadows: v.shadows !== false,
+      lookScale,
+      flightSensitivity,
+      invertFlightPitch,
+      flightAssist,
+      mouseFlightEnabled,
+    };
   } catch {
     return null;
   }

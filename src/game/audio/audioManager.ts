@@ -733,8 +733,44 @@ class AudioManager {
     } catch {}
   }
 
-  // Heavy Blast Explosion (low sub-bass boom + crashing blast noise + rumbling decay)
+  private missileExplosionAudioPool: HTMLAudioElement[] = [];
+  private missileAudioIndex: number = 0;
+
+  // Missile Detonation Sound Effect (/audio/voicebosch-missile-explosion-168600.mp3)
+  public playMissileExplosion() {
+    if (!this.soundEnabled) return;
+    try {
+      if (typeof window !== "undefined") {
+        if (this.missileExplosionAudioPool.length === 0) {
+          for (let i = 0; i < 4; i++) {
+            const a = new Audio("/audio/voicebosch-missile-explosion-168600.mp3");
+            a.volume = 0.82;
+            this.missileExplosionAudioPool.push(a);
+          }
+        }
+        const snd = this.missileExplosionAudioPool[this.missileAudioIndex];
+        this.missileAudioIndex = (this.missileAudioIndex + 1) % this.missileExplosionAudioPool.length;
+        snd.currentTime = 0;
+        const p = snd.play();
+        if (p !== undefined) {
+          p.catch(() => {
+            this.playExplosionSynth();
+          });
+        }
+        return;
+      }
+    } catch {
+      this.playExplosionSynth();
+    }
+  }
+
+  // Heavy Blast Explosion (plays voicebosch-missile-explosion with procedural fallback)
   public playExplosion() {
+    this.playMissileExplosion();
+  }
+
+  // Procedural Web Audio blast fallback
+  public playExplosionSynth() {
     if (!this.soundEnabled) return;
     const ctx = this.getContext();
     if (!ctx) return;

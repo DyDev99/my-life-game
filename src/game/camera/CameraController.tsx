@@ -43,6 +43,9 @@ export function CameraController() {
   const isAfterburnerActive = useGameStore((state) => state.isAfterburnerActive);
   const currentWeaponId = useGameStore((state) => state.currentWeaponId);
   const isAiming = useGameStore((state) => state.isAiming);
+  const flightCameraMode = useGameStore((state) => state.flightCameraMode);
+  const planePitch = useGameStore((state) => state.planePitch);
+  const planeRoll = useGameStore((state) => state.planeRoll);
 
   const { camera, gl } = useThree();
 
@@ -196,11 +199,25 @@ export function CameraController() {
       let targetFov = 60;
 
       if (isPlane) {
-        const speedPush = Math.min(10.0, (vehicleSpeed || 0) / 18.0);
-        targetDist = Math.max(orbitDist.current, 19.5) + speedPush;
-        targetHeight = 4.2;
-        targetShoulderOffset = 0;
-        targetFov = isAfterburnerActive ? 68 : 62;
+        if (flightCameraMode === "cockpit") {
+          targetDist = 0.05;
+          targetHeight = 0.92;
+          targetShoulderOffset = 0;
+          targetFov = isAfterburnerActive ? 82 : 72;
+        } else if (flightCameraMode === "close") {
+          const speedPush = Math.min(5.0, (vehicleSpeed || 0) / 28.0);
+          targetDist = 12.0 + speedPush;
+          targetHeight = 2.4;
+          targetShoulderOffset = 0;
+          targetFov = isAfterburnerActive ? 76 : 64;
+        } else {
+          // Standard Flight Chase View
+          const speedPush = Math.min(9.0, (vehicleSpeed || 0) / 20.0);
+          targetDist = Math.max(orbitDist.current, 20.0) + speedPush;
+          targetHeight = 4.2;
+          targetShoulderOffset = 0;
+          targetFov = isAfterburnerActive ? 74 : 62;
+        }
       } else if (isCar) {
         const speedPush = Math.min(5.5, (vehicleSpeed || 0) / 22.0);
         targetDist = Math.max(orbitDist.current, 13.5) + speedPush;
@@ -241,8 +258,10 @@ export function CameraController() {
       }
 
       // Total look angles with recoil applied
-      const totalYaw = (ridingVehicle ? playerHeading + orbitYaw.current : orbitYaw.current) + recoilYaw.current;
-      const totalPitch = Math.max(-0.45, Math.min(1.22, orbitPitch.current + recoilPitch.current));
+      const totalYaw = (isPlane ? playerHeading : ridingVehicle ? playerHeading + orbitYaw.current : orbitYaw.current) + recoilYaw.current;
+      const totalPitch = isPlane
+        ? (flightCameraMode === "cockpit" ? planePitch : planePitch * 0.4 + orbitPitch.current * 0.5)
+        : Math.max(-0.45, Math.min(1.22, orbitPitch.current + recoilPitch.current));
 
       // Compute camera position relative to target
       const forwardX = Math.sin(totalYaw);
@@ -257,7 +276,6 @@ export function CameraController() {
       const rawCamZ = targetVec.current.z - forwardZ * horizDist + rightZ * targetShoulderOffset;
 
       // 6. Camera Collision Resolver (Anti-Wall-Clipping)
-      // Checks line from player target to camera and slides camera in front of obstacles
       let finalCamX = rawCamX;
       let finalCamY = rawCamY;
       let finalCamZ = rawCamZ;
@@ -278,20 +296,40 @@ export function CameraController() {
       }
 
       const desiredCamPos = new THREE.Vector3(finalCamX, finalCamY, finalCamZ);
-      const followSpeed = isAiming ? 18.0 : isPlane ? 6.5 : isCar ? 7.2 : 9.5;
+      const followSpeed = isAiming ? 18.0 : isPlane ? (flightCameraMode === "cockpit" ? 28.0 : 9.5) : isCar ? 7.2 : 9.5;
       currentCamPos.current.lerp(desiredCamPos, THREE.MathUtils.clamp(delta * followSpeed, 0, 1));
       camera.position.copy(currentCamPos.current);
 
       // 7. Dynamic Camera Look-At Projection
-      // In combat/ADS, center the crosshair perfectly along the camera aim vector
-      const aimDist = isAiming ? 45.0 : currentWeaponId ? 25.0 : 8.0;
-      const lookAtPoint = new THREE.Vector3(
-        targetVec.current.x + forwardX * aimDist + rightX * (isAiming ? 0.35 : 0.4),
-        targetVec.current.y - Math.sin(totalPitch) * aimDist * 0.45,
-        targetVec.current.z + forwardZ * aimDist + rightZ * (isAiming ? 0.35 : 0.4)
-      );
-
-      camera.lookAt(lookAtPoint);
+      if (isPlane) {
+        if (flightCameraMode === "cockpit") {
+          const lookDist = 60.0;
+          const lookAtPoint = new THREE.Vector3(
+            targetVec.current.x + forwardX * lookDist,
+            targetVec.current.y + Math.sin(planePitch) * lookDist,
+            targetVec.current.z + forwardZ * lookDist
+          );
+          camera.lookAt(lookAtPoint);
+          camera.rotation.z = -planeRoll;
+        } else {
+          const lookDist = 45.0;
+          const lookAtPoint = new THREE.Vector3(
+            targetVec.current.x + forwardX * lookDist,
+            targetVec.current.y + Math.sin(planePitch) * 22.0,
+            targetVec.current.z + forwardZ * lookDist
+          );
+          camera.lookAt(lookAtPoint);
+          camera.rotation.z = -planeRoll * 0.22;
+        }
+      } else {
+        const aimDist = isAiming ? 45.0 : currentWeaponId ? 25.0 : 8.0;
+        const lookAtPoint = new THREE.Vector3(
+          targetVec.current.x + forwardX * aimDist + rightX * (isAiming ? 0.35 : 0.4),
+          targetVec.current.y - Math.sin(totalPitch) * aimDist * 0.45,
+          targetVec.current.z + forwardZ * aimDist + rightZ * (isAiming ? 0.35 : 0.4)
+        );
+        camera.lookAt(lookAtPoint);
+      }
     } else {
       // Top Isometric Camera Mode
       const isoDist = 32;

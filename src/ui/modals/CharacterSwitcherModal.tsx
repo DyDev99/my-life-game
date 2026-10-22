@@ -447,8 +447,8 @@ export function CharacterSwitcherModal({
     },
     {
       id: "sokunthea",
-      nameEn: "Sokunthea",
-      nameKm: "សុគន្ធា",
+      nameEn: "Sophea",
+      nameKm: "សុភា",
       careerEn: "Shop Owner",
       careerKm: "ម្ចាស់តូបលក់ដូរ",
       provinceEn: "Siem Reap",

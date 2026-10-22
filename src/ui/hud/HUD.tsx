@@ -117,11 +117,11 @@ export function HUD() {
   ];
 
   return (
-    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3 sm:p-5 select-none overflow-hidden z-20">
+    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3 sm:p-5 select-none overflow-hidden z-40">
       {/* Top Header Bar */}
       {isMobile ? (
-        <div className="ml-auto flex items-start gap-2 pointer-events-auto">
-          <div className="flex flex-col items-end leading-tight [text-shadow:0_1px_3px_rgba(0,0,0,0.95)]">
+        <div className="ml-auto flex items-center gap-2 pointer-events-auto relative z-50">
+          <div className="flex flex-col items-end leading-tight [text-shadow:0_1px_3px_rgba(0,0,0,0.95)] mr-1">
             <span className="text-xl font-black text-emerald-400">${stats.money}</span>
             <span className="text-[11px] font-bold text-white whitespace-nowrap">
               {t.day} {day} · {timeStr}
@@ -130,16 +130,16 @@ export function HUD() {
           <button
             onClick={isNight ? sleepAndEndDay : () => openModal("decision")}
             aria-label={isNight ? "Sleep" : t.chooseDay}
-            className="grid place-items-center w-10 h-10 rounded-full bg-black/35 backdrop-blur-sm border border-white/30 text-amber-300 active:scale-90"
+            className="grid place-items-center w-11 h-11 rounded-full bg-slate-900/80 backdrop-blur-md border border-white/30 text-amber-300 active:scale-90 shadow-lg cursor-pointer touch-manipulation hover:bg-slate-800"
           >
             {isNight ? <Moon className="w-5 h-5 text-indigo-200" /> : <Sun className="w-5 h-5" />}
           </button>
           <button
             onClick={() => setPauseScreen("menu")}
             aria-label="Menu"
-            className="grid place-items-center w-10 h-10 rounded-full bg-black/35 backdrop-blur-sm border border-white/30 text-white active:scale-90"
+            className="grid place-items-center w-11 h-11 rounded-full bg-slate-900/85 backdrop-blur-md border border-white/35 text-white active:scale-90 shadow-lg cursor-pointer touch-manipulation hover:bg-slate-800"
           >
-            <Menu className="w-5 h-5" />
+            <Menu className="w-5 h-5 text-white" />
           </button>
         </div>
       ) : (
@@ -588,34 +588,26 @@ export function HUD() {
         </div>
       )}
 
-      {/* Bottom Main Action Bar */}
-      <div className={`flex flex-col items-center w-full pointer-events-auto ${isMobile ? "gap-1.5 max-w-[19rem] mx-auto pb-0.5" : "gap-2 sm:gap-3 max-w-md mx-auto pb-1 sm:pb-3"}`}>
-        {/* VEHICLE & FLIGHT DASHBOARD */}
-        {ridingVehicle ? (
+      {/* Bottom Main Action Bar (Hidden in Fighter Jet Combat Flight) */}
+      {ridingVehicle !== "plane" && (
+        <div className={`flex flex-col items-center w-full pointer-events-auto ${isMobile ? "gap-1.5 max-w-[19rem] mx-auto pb-0.5" : "gap-2 sm:gap-3 max-w-md mx-auto pb-1 sm:pb-3"}`}>
+          {/* VEHICLE DASHBOARD (Car, Motorbike, Bicycle) */}
+          {ridingVehicle ? (
           <div className="w-full p-3 rounded-3xl bg-slate-900/90 backdrop-blur-md border border-amber-400/50 shadow-2xl flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              {/* Flight / Drive Instruments */}
+              {/* Ground Drive Instruments */}
               <div className="flex items-center gap-2.5">
                 <span className="text-2xl">
-                  {ridingVehicle === "plane" ? "✈️" : ridingVehicle === "supercar" ? "🏎️" : ridingVehicle === "motorbike" ? "🏍️" : "🚲"}
+                  {ridingVehicle === "supercar" ? "🏎️" : ridingVehicle === "motorbike" ? "🏍️" : "🚲"}
                 </span>
                 <div>
                   <div className="flex items-center gap-3">
                     <div className="text-lg sm:text-xl font-black text-amber-400 font-mono">
                       {vehicleSpeed} <span className="text-xs text-slate-400 font-sans font-normal">km/h</span>
                     </div>
-                    {ridingVehicle === "plane" && (
-                      <div className="text-sm font-bold text-cyan-300 font-mono bg-cyan-950/60 px-2 py-0.5 rounded-lg border border-cyan-500/40">
-                        ALT: {Math.round(planeAltitude)} m
-                      </div>
-                    )}
                   </div>
                   <div className="text-[10px] text-amber-300/80 font-bold uppercase tracking-wider">
-                    {ridingVehicle === "plane"
-                      ? isAfterburnerActive
-                        ? "🔥 Afterburner Boost Active"
-                        : "Steel Hawk Combat Flight"
-                      : ridingVehicle === "supercar"
+                    {ridingVehicle === "supercar"
                       ? "Supercar Sport Drive"
                       : ridingVehicle === "motorbike"
                       ? "Motorbike Riding"
@@ -624,64 +616,15 @@ export function HUD() {
                 </div>
               </div>
 
-              {/* Vehicle Actions: Horn, Target Focus, Missile Fire & Dismount */}
+              {/* Vehicle Actions: Horn, Recover & Dismount */}
               <div className="flex items-center gap-1.5 sm:gap-2">
-                {ridingVehicle === "plane" && (
-                  <>
-                    <button
-                      onClick={() => cycleNextTarget()}
-                      className={`px-2.5 py-1.5 rounded-xl font-bold text-xs border flex items-center gap-1 cursor-pointer transition-all ${
-                        lockedTarget
-                          ? "bg-rose-600/30 border-rose-400 text-rose-300 shadow-sm"
-                          : "bg-white/10 hover:bg-white/20 border-white/20 text-slate-300"
-                      }`}
-                      title="Cycle / Lock Attack Target [Tab]"
-                    >
-                      <span>🎯</span>
-                      <span className="hidden sm:inline">{lockedTarget ? "Next [Tab]" : "Target [Tab]"}</span>
-                    </button>
-                    <button
-                      onClick={() => triggerFireMissile()}
-                      disabled={missileAmmo <= 0}
-                      className={`px-3 py-1.5 rounded-xl font-black text-xs border flex items-center gap-1.5 cursor-pointer shadow-lg transition-all ${
-                        missileAmmo > 0
-                          ? "bg-gradient-to-r from-red-600 via-rose-600 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white border-amber-300 shadow-rose-600/50 animate-pulse"
-                          : "bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed opacity-60"
-                      }`}
-                      title={lockedTarget ? "Fire Guided Homing Missile [J]" : "Fire Air-to-Ground Missile [J]"}
-                    >
-                      <span className="text-sm">🚀</span>
-                      <span>{language === "km" ? "បាញ់មីស៊ីល" : lockedTarget ? "Fire Guided" : "Fire Missile"}</span>
-                      <span className="px-1.5 py-0.5 rounded-full bg-black/40 text-[10px] font-mono border border-white/20">
-                        {missileAmmo}/{maxMissileAmmo}
-                      </span>
-                    </button>
-                    {missileAmmo === 0 && (
-                      <button
-                        onClick={() => {
-                          replenishMissiles();
-                          useGameStore.getState().addStatPop(
-                            language === "km" ? "ផ្ទុកគ្រាប់មីស៊ីលពេញវិញ (8/8) 🚀" : "Missiles Reloaded (8/8) 🚀",
-                            "skill"
-                          );
-                        }}
-                        className="px-2 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400/50 text-amber-300 text-xs font-bold transition-all cursor-pointer"
-                        title="Reload Missiles [R]"
-                      >
-                        🔄 Reload
-                      </button>
-                    )}
-                  </>
-                )}
-                {ridingVehicle !== "plane" && (
-                  <button
-                    onClick={ringVehicleHornOrBell}
-                    className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 font-bold text-xs border border-amber-400/40 flex items-center gap-1 cursor-pointer"
-                  >
-                    {ridingVehicle === "bicycle" ? <Bell className="w-3.5 h-3.5" /> : <Megaphone className="w-3.5 h-3.5" />}
-                    <span>{ridingVehicle === "bicycle" ? (language === "km" ? "កណ្ដឹង [B]" : "Bell [B]") : (language === "km" ? "ស៊ីផ្លេ [H]" : "Horn [H]")}</span>
-                  </button>
-                )}
+                <button
+                  onClick={ringVehicleHornOrBell}
+                  className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 font-bold text-xs border border-amber-400/40 flex items-center gap-1 cursor-pointer"
+                >
+                  {ridingVehicle === "bicycle" ? <Bell className="w-3.5 h-3.5" /> : <Megaphone className="w-3.5 h-3.5" />}
+                  <span>{ridingVehicle === "bicycle" ? (language === "km" ? "កណ្ដឹង [B]" : "Bell [B]") : (language === "km" ? "ស៊ីផ្លេ [H]" : "Horn [H]")}</span>
+                </button>
                 <button
                   onClick={() => useGameStore.getState().recoverVehicle()}
                   className="px-3 py-1.5 rounded-xl bg-sky-600/30 hover:bg-sky-600/50 text-sky-200 font-bold text-xs border border-sky-400/40 flex items-center gap-1 cursor-pointer"
@@ -695,42 +638,86 @@ export function HUD() {
                   className="px-3 py-1.5 rounded-xl bg-rose-600/30 hover:bg-rose-600/50 text-rose-300 font-bold text-xs border border-rose-500/40 flex items-center gap-1 cursor-pointer"
                 >
                   <LogOut className="w-3.5 h-3.5" />
-                  <span>{ridingVehicle === "plane" ? (language === "km" ? "ចុះចត [F]" : "Land / Exit [F]") : "Exit [F]"}</span>
+                  <span>Exit [F]</span>
                 </button>
               </div>
             </div>
 
-            {/* Driving / Flying Keys Tip (desktop) */}
+            {/* Driving Keys Tip (desktop) */}
             <div className={`text-[10px] text-slate-300 text-center font-medium bg-black/30 py-1 rounded-lg ${isMobile ? "hidden" : ""}`}>
-              {ridingVehicle === "plane" ? (
-                <>
-                  <kbd className="px-1 rounded bg-white/10 text-white">Tab</kbd> Target •{" "}
-                  <kbd className="px-1 rounded bg-white/10 text-white">J/Enter</kbd> Guided Missile •{" "}
-                  <kbd className="px-1 rounded bg-white/10 text-white">X</kbd> Unlock •{" "}
-                  <kbd className="px-1 rounded bg-white/10 text-white">R</kbd> Reload •{" "}
-                  <kbd className="px-1 rounded bg-white/10 text-white">W/S</kbd> Speed •{" "}
-                  <kbd className="px-1 rounded bg-white/10 text-white">Space</kbd> Climb •{" "}
-                  <kbd className="px-1 rounded bg-white/10 text-white">Q/C</kbd> Dive •{" "}
-                  <kbd className="px-1 rounded bg-white/10 text-white">A/D</kbd> Bank •{" "}
-                  <kbd className="px-1 rounded bg-white/10 text-white">Shift</kbd> Boost •{" "}
-                  <kbd className="px-1 rounded bg-white/10 text-white">F</kbd> Land
-                </>
-              ) : (
-                <>
-                  <kbd className="px-1 rounded bg-white/10 text-white">W</kbd> Gas •{" "}
-                  <kbd className="px-1 rounded bg-white/10 text-white">S</kbd> Brake •{" "}
-                  <kbd className="px-1 rounded bg-white/10 text-white">Space</kbd>{" "}
-                  {ridingVehicle === "supercar" ? "Drift Skid" : "Brake"} •{" "}
-                  <kbd className="px-1 rounded bg-white/10 text-white">A/D</kbd> Steer •{" "}
-                  <kbd className="px-1 rounded bg-white/10 text-white">{ridingVehicle === "bicycle" ? "B" : "H"}</kbd>{" "}
-                  {ridingVehicle === "bicycle" ? "Bell" : "Horn"} •{" "}
-                  <kbd className="px-1 rounded bg-white/10 text-white">U</kbd> Recover •{" "}
-                  <kbd className="px-1 rounded bg-white/10 text-white">F/E</kbd> Exit
-                </>
-              )}
+              <kbd className="px-1 rounded bg-white/10 text-white">W</kbd> Gas •{" "}
+              <kbd className="px-1 rounded bg-white/10 text-white">S</kbd> Brake •{" "}
+              <kbd className="px-1 rounded bg-white/10 text-white">Space</kbd>{" "}
+              {ridingVehicle === "supercar" ? "Drift Skid" : "Brake"} •{" "}
+              <kbd className="px-1 rounded bg-white/10 text-white">A/D</kbd> Steer •{" "}
+              <kbd className="px-1 rounded bg-white/10 text-white">{ridingVehicle === "bicycle" ? "B" : "H"}</kbd>{" "}
+              {ridingVehicle === "bicycle" ? "Bell" : "Horn"} •{" "}
+              <kbd className="px-1 rounded bg-white/10 text-white">U</kbd> Recover •{" "}
+              <kbd className="px-1 rounded bg-white/10 text-white">F/E</kbd> Exit
             </div>
           </div>
-        ) : isMobile ? null : (
+        ) : isMobile ? (
+          /* Mobile Quick Icon Dock (Bottom Center, nestled between Joystick and Combat Buttons) */
+          <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-900/90 backdrop-blur-md border border-white/20 shadow-2xl pointer-events-auto select-none max-w-fit mx-auto mb-1">
+            <button
+              onClick={() => openModal("phone")}
+              aria-label={t.phone}
+              className="p-2 rounded-xl bg-white/10 active:bg-sky-500 active:text-white text-slate-200 hover:text-white transition-all cursor-pointer touch-manipulation flex flex-col items-center justify-center"
+              title={t.phone}
+            >
+              <Smartphone className="w-4 h-4 text-sky-300" />
+            </button>
+            <button
+              onClick={() => openModal("character_select")}
+              aria-label={language === "km" ? "តួអង្គ" : "Character"}
+              className="p-2 rounded-xl bg-white/10 active:bg-amber-500 active:text-white text-slate-200 hover:text-white transition-all cursor-pointer touch-manipulation flex flex-col items-center justify-center"
+              title={language === "km" ? "តួអង្គ" : "Character"}
+            >
+              <User className="w-4 h-4 text-amber-300" />
+            </button>
+            <button
+              onClick={() => mountVehicle("plane")}
+              aria-label={language === "km" ? "យន្តហោះ" : "Fighter Jet"}
+              className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 active:scale-95 text-white transition-all cursor-pointer touch-manipulation flex items-center justify-center gap-1 border border-cyan-400/40 text-xs font-bold shadow-md"
+              title={language === "km" ? "យន្តហោះ" : "Fighter Jet"}
+            >
+              <span>✈️</span>
+              <span className="text-[10px]">{language === "km" ? "យន្តហោះ" : "Jet"}</span>
+            </button>
+            <button
+              onClick={() => mountVehicle("supercar")}
+              aria-label="Supercar"
+              className="px-2 py-1.5 rounded-xl bg-gradient-to-r from-rose-700/80 to-amber-600/80 active:scale-95 text-white transition-all cursor-pointer touch-manipulation flex items-center justify-center gap-1 border border-amber-400/40 text-xs font-bold shadow-md"
+              title="Supercar"
+            >
+              <span>🏎️</span>
+            </button>
+            <button
+              onClick={() => openModal("relationship")}
+              aria-label={t.appFamily}
+              className="p-2 rounded-xl bg-white/10 active:bg-rose-500 active:text-white text-slate-200 hover:text-white transition-all cursor-pointer touch-manipulation flex flex-col items-center justify-center"
+              title={t.appFamily}
+            >
+              <Users className="w-4 h-4 text-rose-300" />
+            </button>
+            <button
+              onClick={() => openModal("journal")}
+              aria-label={t.appJournal}
+              className="p-2 rounded-xl bg-white/10 active:bg-amber-500 active:text-white text-slate-200 hover:text-white transition-all cursor-pointer touch-manipulation flex flex-col items-center justify-center"
+              title={t.appJournal}
+            >
+              <BookOpen className="w-4 h-4 text-amber-300" />
+            </button>
+            <button
+              onClick={() => setPauseScreen("map")}
+              aria-label="Map"
+              className="p-2 rounded-xl bg-white/10 active:bg-emerald-500 active:text-white text-slate-200 hover:text-white transition-all cursor-pointer touch-manipulation flex flex-col items-center justify-center"
+              title="Map"
+            >
+              <Compass className="w-4 h-4 text-emerald-300" />
+            </button>
+          </div>
+        ) : (
           <>
             {/* Quick Vehicle Ride Bar (Always Accessible) */}
             <div className="flex items-center gap-1.5 w-full justify-center">
@@ -892,6 +879,7 @@ export function HUD() {
         </div>
         )}
       </div>
+      )}
     </div>
   );
 }

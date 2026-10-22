@@ -23,6 +23,8 @@ import { collisionWorld, getSurfaceElevation, findNearestRoadPoint } from "@/gam
 import { calculateVehicleImpactDamage, BUILDING_REGISTRY } from "@/game/physics/buildingDestruction";
 import { mobileInput } from "@/game/player/mobileInput";
 import { WORLD_BOUNDS } from "@/data/cityLayout";
+import { flightInput } from "@/game/flight/FlightInputSystem";
+import { flightPhysics } from "@/game/flight/FlightPhysics";
 
 // Keep ground movement this far inside the world edge
 const WORLD_EDGE_MARGIN = 4;
@@ -54,6 +56,7 @@ export function PlayerController() {
   const currentSpeed = useRef<number>(0);
   const vehicleAngle = useRef<number>(Math.PI / 2); // Initial yaw for vehicle
   const tireScreechCooldown = useRef<number>(0);
+  const wasFlyingPlane = useRef<boolean>(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -324,21 +327,111 @@ export function PlayerController() {
     const playerTarget = useGameStore.getState().targetPos;
 
     // =========================================================================
-    // 1. VEHICLE DRIVING & FLIGHT MODE (FIGHTER JET, SUPERCAR, MOTORBIKE, BICYCLE)
+    // 1A. STEEL HAWK FIGHTER JET AERODYNAMIC FLIGHT SIMULATION
+    // =========================================================================
+    if (ridingVehicle === "plane") {
+      const state = useGameStore.getState();
+      if (!wasFlyingPlane.current) {
+        wasFlyingPlane.current = true;
+        const initY = Math.max(0.15, state.planeAltitude || 0.15);
+        flightPhysics.setState(
+          playerTarget[0],
+          initY,
+          playerTarget[2],
+          state.planeHeading || vehicleAngle.current || 0,
+          state.vehicleSpeed || 0
+        );
+      }
+
+      // Sample unified cross-platform flight inputs (Keyboard, Mouse, Touch, Gamepad)
+      const fInput = flightInput.sampleInput({
+        sensitivity: state.flightSensitivity || 1.0,
+        invertPitch: state.invertFlightPitch || false,
+        mouseFlightEnabled: state.mouseFlightEnabled || false,
+      });
+
+      // Actions
+      if (fInput.fire) {
+        state.triggerFireMissile();
+      }
+      if (fInput.reload) {
+        state.replenishMissiles();
+        state.addStatPop(
+          state.language === "km" ? "ផ្ទុកគ្រាប់មីស៊ីលពេញវិញ (8/8) 🚀" : "Missiles Reloaded (8/8) 🚀",
+          "skill"
+        );
+      }
+      if (fInput.cycleTarget) {
+        state.cycleNextTarget();
+      }
+      if (fInput.changeCamera) {
+        state.cycleFlightCameraMode();
+      }
+      if (fInput.pause) {
+        state.setPauseScreen("menu");
+      }
+
+      const res = flightPhysics.update(delta, fInput, {
+        flightAssist: state.flightAssist !== false,
+        flightSensitivity: state.flightSensitivity || 1.0,
+      });
+
+      // Airbase Resupply & Repair Station (Kampong Cham Airfield Runway x: 45..75, z: 145..275)
+      const isAtAirbaseRunway =
+        Math.abs(res.x - 60) < 22 &&
+        res.z >= 145 &&
+        res.z <= 275 &&
+        res.altitude < 2.8 &&
+        res.speed < 180;
+
+      if (isAtAirbaseRunway && (state.missileAmmo < 8 || state.planeHealth < 100)) {
+        state.replenishMissiles();
+        state.repairPlane();
+        state.addStatPop(
+          state.language === "km"
+            ? "🛫 ព្រលានយន្តហោះ: ផ្ទុកគ្រាប់មីស៊ីល (8/8) & ជួសជុលយន្តហោះពេញ 100%!"
+            : "🛫 AIRBASE RESUPPLY: Missiles (8/8) & Airframe (100%) Fully Restored!",
+          "skill"
+        );
+      }
+
+      vehicleAngle.current = res.heading;
+      currentSpeed.current = res.speed;
+
+      useGameStore.setState((s) => ({
+        targetPos: [res.x, res.y, res.z],
+        cameraFocus: [res.x, res.y, res.z],
+        playerHeading: res.heading,
+        vehicleSpeed: Math.round(res.speed),
+        planeAltitude: res.altitude,
+        planePitch: res.pitch,
+        planeRoll: res.roll,
+        planePos: [res.x, res.y, res.z],
+        planeHeading: res.heading,
+        isAfterburnerActive: res.isAfterburner,
+        isAirbrakeActive: res.isAirbrake,
+      }));
+
+      useGameStore.getState().setMovementState("riding", Math.abs(res.speed));
+      checkProximity([res.x, res.y, res.z]);
+      return;
+    } else if (wasFlyingPlane.current) {
+      wasFlyingPlane.current = false;
+    }
+
+    // =========================================================================
+    // 1B. GROUND VEHICLE DRIVING (SUPERCAR, MOTORBIKE, BICYCLE)
     // =========================================================================
     if (ridingVehicle) {
-      const isPlane = ridingVehicle === "plane";
       const isCar = ridingVehicle === "supercar";
       const isMoto = ridingVehicle === "motorbike";
 
-      const isBoost = isPlane && Boolean(k["shift"]);
-
-      // Authentic physics & flight tuning
-      const maxForward = isPlane ? (isBoost ? 460 : 250) : isCar ? 135 : isMoto ? 52 : 22; // km/h
-      const maxReverse = isPlane ? -10 : isCar ? -24 : isMoto ? -14 : -7;
-      const accelRate = isPlane ? (isBoost ? 110 : 65) : isCar ? 46 : isMoto ? 32 : 16;
-      const brakeRate = isPlane ? 45 : isCar ? 62 : isMoto ? 42 : 28;
-      const turnRate = isPlane ? 1.85 : isCar ? 2.3 : isMoto ? 2.5 : 2.9;
+      // Authentic physics tuning
+      const maxForward = isCar ? 135 : isMoto ? 52 : 22; // km/h
+      const maxReverse = isCar ? -24 : isMoto ? -14 : -7;
+      const accelRate = isCar ? 46 : isMoto ? 32 : 16;
+      const brakeRate = isCar ? 62 : isMoto ? 42 : 28;
+      const turnRate = isCar ? 2.3 : isMoto ? 2.5 : 2.9;
 
       const joy = mobileInput.getJoystick();
       const throttle = k["w"] || k["arrowup"] || joy.y > 0.25;
@@ -350,9 +443,7 @@ export function PlayerController() {
 
       // Speed-dependent turning sensitivity
       const absSpeed = Math.abs(currentSpeed.current);
-      const speedSteerFactor = isPlane
-        ? Math.min(1.3, 0.45 + absSpeed / 50.0)
-        : absSpeed < 0.2
+      const speedSteerFactor = absSpeed < 0.2
         ? throttle || reverse
           ? 0.75
           : 0.35
@@ -368,7 +459,7 @@ export function PlayerController() {
       }
 
       // Acceleration / Braking
-      if (handbrake && !isPlane) {
+      if (handbrake) {
         currentSpeed.current = THREE.MathUtils.lerp(currentSpeed.current, 0, delta * (isCar ? 14 : 12));
         if (isCar && absSpeed > 18 && performance.now() - tireScreechCooldown.current > 420) {
           audio.playTireScreech();
@@ -389,109 +480,80 @@ export function PlayerController() {
         currentSpeed.current = THREE.MathUtils.lerp(
           currentSpeed.current,
           0,
-          delta * (isPlane ? 0.8 : isCar ? 1.8 : 2.8)
+          delta * (isCar ? 1.8 : 2.8)
         );
       }
 
-      // 3D Altitude & Surface Elevation Physics
-      let nextY = playerTarget[1];
-      if (isPlane) {
-        const climbRate = isBoost ? 22.0 : 14.0;
-        const diveRate = 12.0;
-
-        // Space or W pitches nose up and climbs
-        if (k[" "] || (throttle && nextY > 0.8)) {
-          nextY = Math.min(65.0, nextY + climbRate * delta);
-        } else if (k["q"] || k["c"] || (reverse && nextY > 0.2)) {
-          nextY = Math.max(0.0, nextY - diveRate * delta);
-        } else if (absSpeed < 35 && nextY > 0.1) {
-          // Slow speed / stall safeguard: glide gently downward
-          nextY = Math.max(0.0, nextY - 4.5 * delta);
-        }
-      }
-
       // Convert speed (km/h) to world displacement (meters/sec)
-      const worldSpeed = (currentSpeed.current / 3.6) * delta * (isPlane ? 1.8 : isCar ? 1.55 : isMoto ? 1.45 : 1.35);
+      const worldSpeed = (currentSpeed.current / 3.6) * delta * (isCar ? 1.55 : isMoto ? 1.45 : 1.35);
       const forwardX = Math.sin(vehicleAngle.current) * worldSpeed;
       const forwardZ = Math.cos(vehicleAngle.current) * worldSpeed;
 
-      // Open world bounds from data/cityLayout (the jet may fly a little past the edge)
-      const margin = isPlane ? -60 : WORLD_EDGE_MARGIN;
-      const rawNextX = Math.max(WORLD_BOUNDS.minX + margin, Math.min(WORLD_BOUNDS.maxX - margin, playerTarget[0] + forwardX));
-      const rawNextZ = Math.max(WORLD_BOUNDS.minZ + margin, Math.min(WORLD_BOUNDS.maxZ - margin, playerTarget[2] + forwardZ));
+      // Open world bounds from data/cityLayout
+      const rawNextX = Math.max(WORLD_BOUNDS.minX + WORLD_EDGE_MARGIN, Math.min(WORLD_BOUNDS.maxX - WORLD_EDGE_MARGIN, playerTarget[0] + forwardX));
+      const rawNextZ = Math.max(WORLD_BOUNDS.minZ + WORLD_EDGE_MARGIN, Math.min(WORLD_BOUNDS.maxZ - WORLD_EDGE_MARGIN, playerTarget[2] + forwardZ));
 
       let nextX = rawNextX;
       let nextZ = rawNextZ;
 
       // Continuous Collision Detection (CCD) Physics Solver
-      // Guarantees vehicles CANNOT tunnel through buildings or houses at any speed
-      if (!isPlane || nextY <= 2.5) {
-        const vehicleRadius = isPlane ? 2.2 : isCar ? 1.35 : isMoto ? 0.65 : 0.45;
-        const sweep = collisionWorld.resolveVehicle(
-          playerTarget[0],
-          playerTarget[2],
-          rawNextX,
-          rawNextZ,
-          vehicleRadius
-        );
-        nextX = sweep.x;
-        nextZ = sweep.z;
+      const vehicleRadius = isCar ? 1.35 : isMoto ? 0.65 : 0.45;
+      const sweep = collisionWorld.resolveVehicle(
+        playerTarget[0],
+        playerTarget[2],
+        rawNextX,
+        rawNextZ,
+        vehicleRadius
+      );
+      nextX = sweep.x;
+      nextZ = sweep.z;
 
-        if (sweep.collided) {
-          const impactSpeed = absSpeed * Math.max(0.25, sweep.impactSpeedFraction);
+      if (sweep.collided) {
+        const impactSpeed = absSpeed * Math.max(0.25, sweep.impactSpeedFraction);
 
-          // 1. Transmit physical collision damage to hit building / structure
-          if (sweep.hitObstacleId && impactSpeed > 18) {
-            const bConfig = BUILDING_REGISTRY[sweep.hitObstacleId];
-            const category = bConfig?.category || "concrete";
-            const dmg = calculateVehicleImpactDamage(ridingVehicle, impactSpeed, category);
-            if (dmg > 0) {
-              useGameStore.getState().damageBuildingWithAmount(
-                sweep.hitObstacleId,
-                dmg,
-                [nextX, nextY, nextZ],
-                sweep.hitObstacleName,
-                "vehicle"
-              );
-            }
+        // 1. Transmit physical collision damage to hit building / structure
+        if (sweep.hitObstacleId && impactSpeed > 18) {
+          const bConfig = BUILDING_REGISTRY[sweep.hitObstacleId];
+          const category = bConfig?.category || "concrete";
+          const dmg = calculateVehicleImpactDamage(ridingVehicle, impactSpeed, category);
+          if (dmg > 0) {
+            useGameStore.getState().damageBuildingWithAmount(
+              sweep.hitObstacleId,
+              dmg,
+              [nextX, playerTarget[1], nextZ],
+              sweep.hitObstacleName,
+              "vehicle"
+            );
           }
+        }
 
-          // 2. Believable collision response audio and camera shockwave
-          if (impactSpeed > 18) {
-            if (isCar) audio.playCarCrash(Math.min(1.0, impactSpeed / 70));
-            else if (isMoto) audio.playCarCrash(Math.min(0.6, impactSpeed / 55));
-            else audio.playBicycleCrash();
+        // 2. Collision audio & camera shake
+        if (impactSpeed > 18) {
+          if (isCar) audio.playCarCrash(Math.min(1.0, impactSpeed / 70));
+          else if (isMoto) audio.playCarCrash(Math.min(0.6, impactSpeed / 55));
+          else audio.playBicycleCrash();
 
-            useGameStore.getState().triggerCameraShake(Math.min(0.85, 0.2 + impactSpeed / 85));
-          }
+          useGameStore.getState().triggerCameraShake(Math.min(0.85, 0.2 + impactSpeed / 85));
+        }
 
-          // 3. Momentum rebound & reflection (prevents vehicle from becoming stuck inside walls)
-          if (sweep.impactSpeedFraction > 0.45) {
-            // Direct head-on collision: rebound backwards slightly
-            currentSpeed.current = -currentSpeed.current * (isCar ? 0.22 : 0.12);
-          } else {
-            // Glancing impact: slide along tangent wall and lose fraction of momentum
-            currentSpeed.current *= Math.max(0.2, 1.0 - sweep.impactSpeedFraction * 0.75);
-          }
+        // 3. Momentum rebound & reflection
+        if (sweep.impactSpeedFraction > 0.45) {
+          currentSpeed.current = -currentSpeed.current * (isCar ? 0.22 : 0.12);
+        } else {
+          currentSpeed.current *= Math.max(0.2, 1.0 - sweep.impactSpeedFraction * 0.75);
         }
       }
 
-      // Smooth Surface Elevation Tracking across roads, approach ramps, and elevated bridge deck
-      if (!isPlane) {
-        const targetSurfaceY = getSurfaceElevation(nextX, nextZ);
-        nextY = THREE.MathUtils.damp(playerTarget[1], targetSurfaceY, 18.0, delta);
-      }
+      // Smooth Surface Elevation Tracking across roads, ramps, and bridges
+      const targetSurfaceY = getSurfaceElevation(nextX, nextZ);
+      const nextY = THREE.MathUtils.damp(playerTarget[1], targetSurfaceY, 18.0, delta);
 
-      useGameStore.setState((s) => ({
+      useGameStore.setState({
         targetPos: [nextX, nextY, nextZ],
         cameraFocus: [nextX, nextY, nextZ],
         playerHeading: vehicleAngle.current,
         vehicleSpeed: Math.round(Math.abs(currentSpeed.current)),
-        planeAltitude: isPlane ? nextY : 0,
-        planePos: isPlane ? [nextX, nextY, nextZ] : s.planePos,
-        planeHeading: isPlane ? vehicleAngle.current : s.planeHeading,
-        isAfterburnerActive: isBoost && absSpeed > 30,
-      }));
+      });
 
       // Update parked supercar location while driving
       if (isCar) {

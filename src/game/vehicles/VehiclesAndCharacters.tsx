@@ -879,6 +879,8 @@ export function PlayerCharacter() {
   const playerHeading = useGameStore((state) => state.playerHeading);
   const enterVehicleAnimation = useGameStore((state) => state.enterVehicleAnimation);
   const planeAltitude = useGameStore((state) => state.planeAltitude);
+  const planePitch = useGameStore((state) => state.planePitch);
+  const planeRoll = useGameStore((state) => state.planeRoll);
   const isAfterburnerActive = useGameStore((state) => state.isAfterburnerActive);
 
   // Smooth position, rotation, and animation phase variables
@@ -1077,33 +1079,43 @@ export function PlayerCharacter() {
       }
 
       // 4. Turning lean / roll banking
-      if (ridingVehicle === "supercar") {
+      if (ridingVehicle === "plane") {
+        rootGroupRef.current.rotation.x = -planePitch;
+        rootGroupRef.current.rotation.z = -planeRoll;
+      } else if (ridingVehicle === "supercar") {
+        rootGroupRef.current.rotation.x = 0;
         const speedFactor = Math.min(1.0, spd / 50.0);
         const dynamicRoll = THREE.MathUtils.clamp(angleDiff * 1.5 * speedFactor, -0.06, 0.06);
         rollBanking.current = THREE.MathUtils.lerp(rollBanking.current, dynamicRoll, delta * 8.0);
+        rootGroupRef.current.rotation.z = rollBanking.current;
       } else if (isMoto) {
+        rootGroupRef.current.rotation.x = 0;
         // Deep countersteering lean (up to 26 degrees)
         const speedFactor = Math.min(1.0, spd / 18.0);
         const dynamicRoll = THREE.MathUtils.clamp(-angleDiff * 6.2 * speedFactor, -0.45, 0.45);
         const idleRestTilt = 0.055 * footDown;
         const targetRoll = dynamicRoll * (1.0 - footDown * 0.7) + idleRestTilt;
         rollBanking.current = THREE.MathUtils.lerp(rollBanking.current, targetRoll, delta * 8.5);
+        rootGroupRef.current.rotation.z = rollBanking.current;
       } else {
+        rootGroupRef.current.rotation.x = 0;
         // Bicycle lean
         const speedFactor = Math.min(1.0, spd / 12.0);
         const dynamicRoll = THREE.MathUtils.clamp(-angleDiff * 4.6 * speedFactor, -0.32, 0.32);
         const idleRestTilt = 0.04 * footDown;
         const targetRoll = dynamicRoll * (1.0 - footDown * 0.7) + idleRestTilt;
         rollBanking.current = THREE.MathUtils.lerp(rollBanking.current, targetRoll, delta * 7.5);
+        rootGroupRef.current.rotation.z = rollBanking.current;
       }
-      rootGroupRef.current.rotation.z = rollBanking.current;
 
       // 5. Authentic mechanical engine vibration & road suspension feel (smooth harmonic sine, NO white noise)
-      const engineFreq = isMoto ? 24.0 : 12.0;
-      const roadFeel = spd > 0.5
-        ? Math.sin(state.clock.elapsedTime * engineFreq) * 0.003
-        : (isMoto ? Math.sin(state.clock.elapsedTime * 10.0) * 0.0018 : 0);
-      rootGroupRef.current.position.y = targetPos[1] + roadFeel;
+      if (ridingVehicle !== "plane") {
+        const engineFreq = isMoto ? 24.0 : 12.0;
+        const roadFeel = spd > 0.5
+          ? Math.sin(state.clock.elapsedTime * engineFreq) * 0.003
+          : (isMoto ? Math.sin(state.clock.elapsedTime * 10.0) * 0.0018 : 0);
+        rootGroupRef.current.position.y = targetPos[1] + roadFeel;
+      }
 
       // 6. REAL FBX SKELETAL RIG VEHICLE POSING
       if (fbxModel) {
@@ -1544,6 +1556,8 @@ export function PlayerCharacter() {
           <FighterJet
             speed={vehicleSpeed}
             altitude={planeAltitude}
+            pitchAngle={planePitch}
+            rollAngle={planeRoll}
             isAfterburner={isAfterburnerActive}
           />
         </group>

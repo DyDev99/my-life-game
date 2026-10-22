@@ -32,7 +32,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDefinition> = {
   sreyneath: { id: "sreyneath", nameEn: "Sreyneath", nameKm: "ស្រីនាថ", icon: "👩‍🎓", portrait: SPRITES.portrait_sreyneath_smile, model: MODELS.CHR_Sreyneath, defaultCareer: "Developer", rig: "procedural" },
   vuth: { id: "vuth", nameEn: "Vuth", nameKm: "វុធ", icon: "💻", portrait: SPRITES.portrait_vuth_smile, model: MODELS.CHR_Vuth, defaultCareer: "Developer", rig: "procedural" },
   taing: { id: "taing", nameEn: "Taing", nameKm: "តាំង", icon: "🌾", portrait: SPRITES.portrait_taing_smile, model: MODELS.CHR_Taing, defaultCareer: "Farmer", rig: "procedural" },
-  sokunthea: { id: "sokunthea", nameEn: "Sokunthea", nameKm: "សុគន្ធា", icon: "🏪", portrait: SPRITES.portrait_sokunthea_smile, model: MODELS.CHR_Sokunthea, defaultCareer: "ShopOwner", rig: "procedural" },
+  sokunthea: { id: "sokunthea", nameEn: "Sophea", nameKm: "សុភា", icon: "🏪", portrait: SPRITES.portrait_sokunthea_smile, model: MODELS.CHR_Sokunthea, defaultCareer: "ShopOwner", rig: "procedural" },
   chandy: { id: "chandy", nameEn: "Chandy", nameKm: "ចាន់ឌី", icon: "🥊", portrait: SPRITES.portrait_chandy_fierce, model: MODELS.CHR_Chandy, defaultCareer: "Kickboxer", rig: "procedural" },
   maiko: { id: "maiko", nameEn: "Maiko", nameKm: "ម៉ៃកូ", icon: "🥊", portrait: SPRITES.portrait_maiko_neutral, model: MODELS.CHR_Maiko, defaultCareer: "Kickboxer", rig: "clips", texturePrefix: "Maiko", canFight: true },
 };

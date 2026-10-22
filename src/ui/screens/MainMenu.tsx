@@ -14,6 +14,7 @@ export function MainMenu() {
   const soundEnabled = useGameStore((state) => state.soundEnabled);
   const setLanguage = useGameStore((state) => state.setLanguage);
   const toggleSound = useGameStore((state) => state.toggleSound);
+  const launchFireJetMode = useGameStore((state) => state.launchFireJetMode);
 
   const t = translations[language];
 
@@ -80,6 +81,17 @@ export function MainMenu() {
 
         {/* Action Buttons */}
         <div className="flex flex-col gap-3 w-full max-w-xs">
+          {/* FireJet Flight Mode Instant Launch */}
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => launchFireJetMode()}
+            className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-600 text-white font-black text-base shadow-xl shadow-cyan-500/35 border border-cyan-300/50 flex items-center justify-center gap-2 cursor-pointer animate-pulse"
+          >
+            <span className="text-xl">✈️</span>
+            <span>{language === "km" ? "ហោះហើរ: យន្តហោះ FireJet" : "Take Flight: FireJet Combat"}</span>
+          </motion.button>
+
           {/* New Life */}
           <motion.button
             whileHover={{ scale: 1.03 }}

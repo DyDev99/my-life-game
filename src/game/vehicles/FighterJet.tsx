@@ -241,6 +241,20 @@ export function FighterJet({
             {/* Jet Engine Glow Light */}
             <pointLight ref={flameLightRef} distance={18} decay={2} position={[0, 0, -1.5]} />
           </group>
+
+          {/* Wingtip Vapor Contrails during High-G turns or Afterburner */}
+          {(speed > 300 || isAfterburner || Math.abs(rollAngle) > 0.4) && (
+            <group position={[0, 0.12, -2.8]}>
+              <mesh position={[-5.3, 0, -1.8]} rotation={[Math.PI / 2, 0, 0]}>
+                <cylinderGeometry args={[0.04, 0.12, 5.0, 8]} />
+                <meshBasicMaterial color="#E0F7FA" transparent opacity={isAfterburner ? 0.65 : 0.35} />
+              </mesh>
+              <mesh position={[5.3, 0, -1.8]} rotation={[Math.PI / 2, 0, 0]}>
+                <cylinderGeometry args={[0.04, 0.12, 5.0, 8]} />
+                <meshBasicMaterial color="#E0F7FA" transparent opacity={isAfterburner ? 0.65 : 0.35} />
+              </mesh>
+            </group>
+          )}
         </group>
       ) : (
         <ProceduralJetFallback isAfterburner={isAfterburner} speed={speed} />

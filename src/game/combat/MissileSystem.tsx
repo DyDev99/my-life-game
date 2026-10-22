@@ -5,6 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useGameStore, AttackTarget, DamagedBuildingState } from "@/state/gameStore";
 import { collisionWorld } from "@/game/physics/collisionSystem";
+import { audio } from "@/game/audio/audioManager";
 
 interface ActiveMissile {
   id: string;
@@ -107,8 +108,10 @@ export function MissileSystem() {
       spawnZ = target.position[2] - Math.cos(heading) * 35;
     }
 
-    const speed = isPlane ? 140.0 : 110.0;
-    const launchPitch = isPlane ? 0.0 : -0.25;
+    // Ejection speed accounts for aircraft velocity so missile rapidly pulls ahead
+    const jetForwardSpeed = isPlane ? (state.vehicleSpeed / 3.6) : 0;
+    const speed = isPlane ? Math.max(160.0, jetForwardSpeed + 65.0) : 110.0;
+    const launchPitch = isPlane ? (state.planePitch || 0) : -0.25;
     const vx = Math.sin(heading) * Math.cos(launchPitch) * speed;
     const vy = -Math.sin(launchPitch) * speed;
     const vz = Math.cos(heading) * Math.cos(launchPitch) * speed;
@@ -197,31 +200,33 @@ export function MissileSystem() {
           m.pos.y += m.vel.y * subDt;
           m.pos.z += m.vel.z * subDt;
 
-          // Ground impact check
-          if (m.pos.y <= 0.15) {
+          // Ground impact check (armed after 0.2s of launch clearance)
+          if (m.life > 0.2 && m.pos.y <= 0.15) {
             collided = true;
             hitPoint = m.pos.clone();
             hitPoint.y = 0.1;
             break;
           }
 
-          // AABB Collision check against world obstacles
-          for (const box of boxes) {
-            const isLow = box.id.includes("wall") || box.id.includes("rail") || box.id.includes("edge");
-            const boxH = isLow ? 2.5 : 18.0;
+          // AABB Collision check against world obstacles (armed after 0.2s of launch clearance)
+          if (m.life > 0.2) {
+            for (const box of boxes) {
+              const isLow = box.id.includes("wall") || box.id.includes("rail") || box.id.includes("edge");
+              const boxH = isLow ? 2.5 : 18.0;
 
-            if (
-              m.pos.x >= box.minX - 0.4 &&
-              m.pos.x <= box.maxX + 0.4 &&
-              m.pos.z >= box.minZ - 0.4 &&
-              m.pos.z <= box.maxZ + 0.4 &&
-              m.pos.y <= boxH
-            ) {
-              collided = true;
-              hitPoint = m.pos.clone();
-              hitBuildingId = box.id;
-              hitBuildingName = box.name || "Building";
-              break;
+              if (
+                m.pos.x >= box.minX - 0.4 &&
+                m.pos.x <= box.maxX + 0.4 &&
+                m.pos.z >= box.minZ - 0.4 &&
+                m.pos.z <= box.maxZ + 0.4 &&
+                m.pos.y <= boxH
+              ) {
+                collided = true;
+                hitPoint = m.pos.clone();
+                hitBuildingId = box.id;
+                hitBuildingName = box.name || "Building";
+                break;
+              }
             }
           }
           if (collided) break;
@@ -250,6 +255,10 @@ export function MissileSystem() {
             maxAge: 0.85,
             scale: 1.0,
           });
+
+          // Play authentic missile detonation sound effect
+          audio.playMissileExplosion();
+          useGameStore.getState().triggerCameraShake(0.65);
 
           if (hitBuildingId) {
             damageBuilding(hitBuildingId, [hitPoint.x, hitPoint.y, hitPoint.z], hitBuildingName);

@@ -432,11 +432,11 @@ export function MobileShooterControls() {
       </div>
 
       {/* ===================================================================== */}
-      {/* 1. MOBILE TOUCH LOOK / AIM DRAG REGION (Only on Mobile) */}
+      {/* 1. MOBILE TOUCH LOOK / AIM DRAG REGION (Only on Mobile when on foot, clear of top menu) */}
       {/* ===================================================================== */}
-      {isMobileMode && (
+      {isMobileMode && !ridingVehicle && (
         <div
-          className="absolute top-0 right-0 w-[55%] h-full pointer-events-auto touch-none"
+          className="absolute top-16 right-0 w-[55%] bottom-0 pointer-events-auto touch-none"
           onTouchStart={handleLookStart}
           onTouchMove={handleLookMove}
           onTouchEnd={handleLookEnd}
@@ -631,9 +631,9 @@ export function MobileShooterControls() {
       </div>
 
       {/* ===================================================================== */}
-      {/* 4. MOBILE VIRTUAL JOYSTICK (Only rendered on Mobile Mode) */}
+      {/* 4. MOBILE VIRTUAL JOYSTICK (Only rendered on Mobile Mode when on foot) */}
       {/* ===================================================================== */}
-      {isMobileMode && (
+      {isMobileMode && !ridingVehicle && (
         <div
           className="absolute bottom-3 left-3 w-40 h-40 pointer-events-auto touch-none flex items-center justify-center"
           data-touch-control="joystick"
@@ -734,9 +734,9 @@ export function MobileShooterControls() {
       )}
 
       {/* ===================================================================== */}
-      {/* 7. COMPUTER CONTROLLER DOCK (Only rendered in Computer Mode) */}
+      {/* 7. COMPUTER CONTROLLER DOCK (Only rendered in Computer Mode when on foot) */}
       {/* ===================================================================== */}
-      {!isMobileMode && (
+      {!isMobileMode && !ridingVehicle && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 pointer-events-auto">
           {/* Tactical Computer Gamepad & Hotkey Bar */}
           <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-slate-900/90 backdrop-blur-md border border-white/20 shadow-2xl text-xs text-slate-300">
@@ -859,7 +859,7 @@ export function MobileShooterControls() {
           <RotateCw className="w-3 h-3 text-white/60" />
         </button>
       )}
-      {!isMobileMode && (
+      {!isMobileMode && !ridingVehicle && (
       <div className="absolute flex items-center gap-1.5 p-1.5 rounded-2xl bg-black/60 backdrop-blur-md border border-white/20 shadow-2xl pointer-events-auto transition-all bottom-18 left-1/2 -translate-x-1/2">
         {(["m416", "shotgun", "sniper"] as WeaponId[]).map((wId, idx) => {
           const w = WEAPON_REGISTRY[wId];

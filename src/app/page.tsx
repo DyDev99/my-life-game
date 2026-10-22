@@ -26,6 +26,8 @@ import { Minimap } from "@/ui/hud/Minimap";
 import { PauseMenu } from "@/ui/screens/PauseMenu";
 import { WorldMap } from "@/ui/screens/WorldMap";
 import { RotateDeviceGate } from "@/ui/screens/RotateDeviceGate";
+import { FlightAviationHUD } from "@/ui/hud/FlightAviationHUD";
+import { MobileFlightControls } from "@/ui/hud/MobileFlightControls";
 
 
 // Dynamically import Three.js canvas to ensure client-only rendering
@@ -68,6 +70,8 @@ export default function GamePage() {
           >
             <HUD />
             <MobileShooterControls />
+            <FlightAviationHUD />
+            <MobileFlightControls />
           </div>
           <FighterHud />
 

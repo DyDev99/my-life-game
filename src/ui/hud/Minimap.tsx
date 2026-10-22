@@ -18,7 +18,12 @@ export function parkedVehicleMarkers(): MapMarkers["vehicles"] {
   const s = useGameStore.getState();
   const out: MapMarkers["vehicles"] = [];
   if (s.ridingVehicle !== "supercar") out.push({ x: s.supercarPos[0], z: s.supercarPos[2], icon: "🏎️" });
-  if (s.ridingVehicle !== "plane") out.push({ x: s.planePos[0], z: s.planePos[2], icon: "✈️" });
+  if (s.ridingVehicle !== "plane") {
+    out.push({ x: s.planePos[0], z: s.planePos[2], icon: "✈️" });
+  } else {
+    // When flying, prominently mark the Airbase Runway Resupply & Rearm station
+    out.push({ x: 60, z: 210, icon: "🛫" });
+  }
   return out;
 }
 

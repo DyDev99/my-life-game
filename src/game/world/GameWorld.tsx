@@ -40,6 +40,7 @@ import { PracticeTargets } from "@/game/combat/PracticeTargets";
 import { WeaponModel } from "@/game/combat/WeaponModel";
 import { WaypointBeacon } from "@/game/navigation/WaypointBeacon";
 import { ExpandedCity } from "@/game/world/expansion/ExpandedCity";
+import { AirbaseRunwayVisuals } from "./AirbaseRunwayVisuals";
 
 export function GameWorld() {
   const ridingVehicle = useGameStore((state) => state.ridingVehicle);
@@ -53,6 +54,8 @@ export function GameWorld() {
 
   return (
     <group>
+      {/* Kampong Cham Airfield Military Runway & Rearming Station */}
+      <AirbaseRunwayVisuals />
       {/* Dynamic 24h Day/Night Lighting with Sun, Moon, Atmospheric Fog, and Night City Lights */}
       <DayNightLighting />
 

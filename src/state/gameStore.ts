@@ -193,6 +193,16 @@ interface GameState {
   planePos: [number, number, number];
   planeHeading: number;
   planeAltitude: number;
+  planePitch: number;
+  planeRoll: number;
+  planeHealth: number;
+  flightThrottle: number;
+  isAirbrakeActive: boolean;
+  flightCameraMode: "chase" | "cockpit" | "close";
+  flightSensitivity: number;
+  invertFlightPitch: boolean;
+  flightAssist: boolean;
+  mouseFlightEnabled: boolean;
   isAfterburnerActive: boolean;
   enterVehicleAnimation: boolean;
 
@@ -200,6 +210,7 @@ interface GameState {
   missileAmmo: number;
   maxMissileAmmo: number;
   fireMissileTrigger: number;
+  lastMissileFireTime?: number;
   triggerFireMissile: () => boolean;
   replenishMissiles: () => void;
   damagedBuildings: Record<string, DamagedBuildingState>;
@@ -305,6 +316,17 @@ interface GameState {
   setVehicleSpeed: (spd: number) => void;
   setSupercarPosition: (pos: [number, number, number], heading?: number) => void;
   setPlanePosition: (pos: [number, number, number], heading?: number, altitude?: number) => void;
+  setPlanePitchAndRoll: (pitch: number, roll: number) => void;
+  damagePlane: (amount: number) => void;
+  repairPlane: () => void;
+  setFlightThrottle: (val: number) => void;
+  setIsAirbrakeActive: (active: boolean) => void;
+  cycleFlightCameraMode: () => void;
+  setFlightSensitivity: (val: number) => void;
+  setInvertFlightPitch: (invert: boolean) => void;
+  setFlightAssist: (assist: boolean) => void;
+  setMouseFlightEnabled: (enabled: boolean) => void;
+  launchFireJetMode: () => void;
   setAfterburnerActive: (active: boolean) => void;
   setEnterVehicleAnimation: (anim: boolean) => void;
   ringVehicleHornOrBell: () => void;
@@ -408,8 +430,16 @@ function scaledSensitivity(scale: number) {
   };
 }
 
-function persistSettings(s: Pick<GameState, "graphicsQuality" | "shadowsEnabled" | "lookSensitivityScale">) {
-  saveSettings({ quality: s.graphicsQuality, shadows: s.shadowsEnabled, lookScale: s.lookSensitivityScale });
+function persistSettings(s: Pick<GameState, "graphicsQuality" | "shadowsEnabled" | "lookSensitivityScale" | "flightSensitivity" | "invertFlightPitch" | "flightAssist" | "mouseFlightEnabled">) {
+  saveSettings({
+    quality: s.graphicsQuality,
+    shadows: s.shadowsEnabled,
+    lookScale: s.lookSensitivityScale,
+    flightSensitivity: s.flightSensitivity,
+    invertFlightPitch: s.invertFlightPitch,
+    flightAssist: s.flightAssist,
+    mouseFlightEnabled: s.mouseFlightEnabled,
+  });
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -510,33 +540,68 @@ export const useGameStore = create<GameState>((set, get) => ({
   nearVehicle: null,
   supercarPos: [22.5, 0, -18],
   supercarHeading: 0,
-  planePos: [42, 0, 22],
-  planeHeading: Math.PI,
+  planePos: [60, 0.15, 160], // Kampong Cham Airfield Runway Threshold
+  planeHeading: 0,           // Aligned facing south down the runway
   planeAltitude: 0,
+  planePitch: 0,
+  planeRoll: 0,
+  planeHealth: 100,
+  flightThrottle: 0.0,       // Starts idle at 0 throttle
+  isAirbrakeActive: false,
+  flightCameraMode: "chase",
+  flightSensitivity: 1.0,
+  invertFlightPitch: false,
+  flightAssist: true,
+  mouseFlightEnabled: false,
   isAfterburnerActive: false,
   enterVehicleAnimation: false,
 
   missileAmmo: 8,
   maxMissileAmmo: 8,
   fireMissileTrigger: 0,
+  lastMissileFireTime: 0,
   damagedBuildings: {},
 
   triggerFireMissile: () => {
-    const ammo = get().missileAmmo;
-    if (ammo <= 0) {
-      const isKm = get().language === "km";
-      get().addStatPop(isKm ? "អស់គ្រាប់មីស៊ីលហើយ! ⚠️" : "Out of Missiles! ⚠️", "stress");
+    const now = performance.now();
+    const state = get();
+
+    // Weapon salvo rate limiter (minimum 380ms between missile launches)
+    if (now - (state.lastMissileFireTime || 0) < 380) {
       return false;
     }
+
+    // Ground safety interlock: prevent point-blank missile detonation while parked
+    if (state.ridingVehicle === "plane" && (state.planeAltitude || 0) < 1.2 && (state.vehicleSpeed || 0) < 60) {
+      const isKm = state.language === "km";
+      state.addStatPop(
+        isKm ? "⚠️ សុវត្ថិភាព: យន្តហោះត្រូវតែហោះលើអាកាសសិន ទើបអាចបាញ់មីស៊ីលបាន" : "⚠️ SAFETY LOCK: Must be airborne to launch missiles!",
+        "stress"
+      );
+      return false;
+    }
+
+    const ammo = state.missileAmmo;
+    if (ammo <= 0) {
+      const isKm = state.language === "km";
+      state.addStatPop(
+        isKm ? "⚠️ អស់គ្រាប់មីស៊ីល! ចុច [R] ឬត្រឡប់ទៅព្រលានយន្តហោះដើម្បីផ្ទុកគ្រាប់" : "⚠️ OUT OF MISSILES! Press [R] or return to Airbase to rearm",
+        "stress"
+      );
+      return false;
+    }
+
     audio.playMissileLaunch();
-    set((state) => ({
+    set({
       missileAmmo: ammo - 1,
       fireMissileTrigger: state.fireMissileTrigger + 1,
-    }));
+      lastMissileFireTime: now,
+    });
     return true;
   },
 
   replenishMissiles: () => {
+    audio.playClick();
     set({ missileAmmo: 8 });
   },
 
@@ -824,6 +889,70 @@ export const useGameStore = create<GameState>((set, get) => ({
       planeAltitude: altitude !== undefined ? altitude : state.planeAltitude,
     })),
   setAfterburnerActive: (isAfterburnerActive) => set({ isAfterburnerActive }),
+  setPlanePitchAndRoll: (planePitch, planeRoll) => set({ planePitch, planeRoll }),
+  damagePlane: (amount) => {
+    const current = get().planeHealth;
+    const next = Math.max(0, current - amount);
+    if (next < current) {
+      get().triggerCameraShake(0.5);
+    }
+    set({ planeHealth: next });
+  },
+  repairPlane: () => set({ planeHealth: 100 }),
+  setFlightThrottle: (flightThrottle) => set({ flightThrottle: Math.min(1.0, Math.max(0.0, flightThrottle)) }),
+  setIsAirbrakeActive: (isAirbrakeActive) => set({ isAirbrakeActive }),
+  cycleFlightCameraMode: () => {
+    audio.playClick();
+    const curr = get().flightCameraMode;
+    const next = curr === "chase" ? "cockpit" : curr === "cockpit" ? "close" : "chase";
+    set({ flightCameraMode: next });
+  },
+  setFlightSensitivity: (flightSensitivity) => {
+    set({ flightSensitivity });
+    persistSettings(get());
+  },
+  setInvertFlightPitch: (invertFlightPitch) => {
+    set({ invertFlightPitch });
+    persistSettings(get());
+  },
+  setFlightAssist: (flightAssist) => {
+    set({ flightAssist });
+    persistSettings(get());
+  },
+  setMouseFlightEnabled: (mouseFlightEnabled) => {
+    set({ mouseFlightEnabled });
+    persistSettings(get());
+  },
+  launchFireJetMode: () => {
+    const isKm = get().language === "km";
+    audio.playCarIgnition();
+    get().addStatPop(
+      isKm
+        ? "🛫 ព្រលានយន្តហោះ: ចុច [W] ដើម្បីបង្កើនល្បឿន និងទាញ [S] ដើម្បីហោះឡើង!"
+        : "🛫 RUNWAY 18: Hold [W] to throttle up (Vr: 140 km/h) & pull back [S] to rotate & take off!",
+      "skill"
+    );
+    set({
+      screen: "game_world",
+      ridingVehicle: "plane",
+      planePos: [60, 0.15, 160], // Aligned on runway facing south
+      targetPos: [60, 0.15, 160],
+      cameraFocus: [60, 0.15, 160],
+      playerHeading: 0,
+      planeHeading: 0,
+      planePitch: 0,
+      planeRoll: 0,
+      planeAltitude: 0,
+      planeHealth: 100,
+      flightThrottle: 0.0,
+      vehicleSpeed: 0,
+      missileAmmo: 8,
+      isAfterburnerActive: false,
+      isAirbrakeActive: false,
+      activeModal: null,
+      pauseScreen: null,
+    });
+  },
   setEnterVehicleAnimation: (enterVehicleAnimation) => set({ enterVehicleAnimation }),
 
   playerHeading: 0,
@@ -1091,7 +1220,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       sreyneath: { name: "Sreyneath (ស្រីនាថ)", career: "Developer", hometown: "Phnom Penh", age: 21, education: "Royal University of Phnom Penh" },
       vuth: { name: "Vuth (វុធ)", career: "Developer", hometown: "Phnom Penh", age: 25, education: "Institute of Technology of Cambodia" },
       taing: { name: "Taing (តាំង)", career: "Farmer", hometown: "Takeo", age: 32, education: "Agricultural Vocational" },
-      sokunthea: { name: "Sokunthea (សុគន្ធា)", career: "ShopOwner", hometown: "Siem Reap", age: 28, education: "Business & Commerce" },
+      sokunthea: { name: "Sophea (សុភា)", career: "ShopOwner", hometown: "Siem Reap", age: 28, education: "Business & Commerce" },
       chandy: { name: "Chandy (ចាន់ឌី)", career: "Kickboxer", hometown: "Phnom Penh", age: 28, education: "National Sports Academy" },
       maiko: { name: "Maiko (ម៉ៃកូ)", career: "Kickboxer", hometown: "Kampong Cham", age: 22, education: "Kampong Cham Boxing Club" },
     };
